@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 5 covered phone-landscape viewer maximisation, the 10-track music library (Klasik + Kontemporer) and the two fixes from iteration 4. Backend: 61 passed, 1 skipped. test_music.py now expects 10 tracks and checks genre, license and the CC BY credit. Frontend: landscape 844x390, 667x375 and 932x430 all work. The masthead is 45px with inline tabs. story-panel and thumb-rail are hidden. Render height is 334 of 390, 319 of 375 and 374 of 430 (the image fills the stage height). The landscape overlay shows 'NN / NN + title'. Denah button opens the bottom sheet. These all work in landscape: prev/next, arrow key, hotspot, autoplay (moves on after about 7s), swipe, music (meekness.mp3 plays) and fullscreen. Denah tab is locked (scrollHeight equals innerHeight). PDF tab shows in landscape. Portrait 390x844 is back to the normal mobile layout. Desktop 1920x800 still has the story aside and rail. Studio music picker shows both group headers, 10 rows, the CC BY tag and preview buttons. Choosing meekness sends PUT music-choice and the row becomes active. 'Tanpa musik', upload and track rows are aligned (left/right 338/972). The keyboard FOV slider now sends PATCH camera with the new fov (60 to 62) and the camera is kept. The INERRE watermark is 42px on renders and PDF pages again. No eyebrow regressions seen in the masthead, studio list or editor.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "CC BY music credit in viewer", "issue": "The backend returns music_title, e.g. 'Meekness · Kai Engel (CC BY 4.0)', but the frontend never uses it (grep music_title in src finds nothing). The viewer shows no credit; the music button title is only 'Matikan musik'. CC BY 4.0 requires attribution, and the MusicPicker text promises 'kredit tampil otomatis di viewer'.", "affected_selectors": ["[data-testid=music-toggle-btn]"]}
+    ],
+    "design_issues": [
+      {"screen": "Viewer phone landscape (667x375)", "issues": ["The landscape-story-overlay (bottom-left) and the top-right control buttons sit on top of the render corners on narrow landscape. Acceptable, but consider auto-hiding the overlay after a few seconds.", "The page is 1px taller than the viewport in every layout (scrollHeight = innerHeight + 1, desktop too), probably from the masthead border plus calc(100dvh-44/64px). This causes a tiny scroll."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_music.py", "/app/backend/tests/test_inerre_api.py", "/app/backend/tests/test_media.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Show data.music_title in the viewer, e.g. as the music-toggle-btn title/tooltip or as small credit text near the music button or in the landscape overlay, so CC BY tracks get their attribution.",
+    "Minor: fix the 1px vertical overflow, e.g. h-11 header including its border, or calc(100dvh-45px)."
+  ],
+  "critical_code_review_comments": [
+    "PlanCameraEditor: each ArrowRight sends a PATCH via onValueCommit. Works, but holding a key sends many requests; a debounce is optional.",
+    "MusicPicker: the JSX indentation inside tracks.map is off (nested div). Cosmetic only.",
+    "MusicPicker: api.get('/music/tracks') has no catch or error state."
+  ],
+  "updated_files": ["/app/backend/tests/test_music.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "seed_data_creation": "Created the TEST_UI Media T1 project (a5c5b18e74f6414e81ea6284a0bd0acc) with setup_ui_media.py and deleted it afterwards. test_music.py creates and deletes its own TEST_ project. The sample project was not changed.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_music.py now has CLASSIC + CONTEMP (10 tracks) and test_03b for the CC BY title. Each ticket.py sign-in ticket can be used only once, so create a new one for every browser session. Landscape is checked by setting a viewport with height <= 520 and width > height. Open item: the viewer does not show music_title / CC BY credit."
+}

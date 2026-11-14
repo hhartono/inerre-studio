@@ -89,7 +89,7 @@ export function MusicPicker() {
 
   return (
     <Section title="Musik tur">
-      <p className="mb-5 text-sm text-paper/45">Diputar saat klien menjalankan tur. Lagu bawaan: musik klasik domain publik dan musik kontemporer berlisensi bebas (CC0 / CC BY, kredit tampil otomatis di viewer). Klien bisa mematikannya.</p>
+      <p className="mb-5 text-sm text-paper/45">Diputar saat klien menjalankan tur. Lagu bawaan: musik lounge (Kevin MacLeod, CC BY, kredit tampil otomatis di viewer) dan musik klasik domain publik. Klien bisa mematikannya.</p>
       <div className="space-y-2" data-testid="music-picker">
         {tracks.map((t, i) => (
           <div key={t.id}>

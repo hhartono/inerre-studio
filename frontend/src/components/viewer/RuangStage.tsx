@@ -25,6 +25,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   const scene = tour[index];
   const [playing, setPlaying] = useState(false);
   const [sheet, setSheet] = useState(false);
+  const [wake, setWake] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
   const valid = useMemo(() => new Set(tour.map((s) => s.id)), [tour]);
@@ -69,6 +70,35 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
     }
   }, [index, tour]);
 
+  useEffect(() => {
+    const wl = (navigator as any).wakeLock;
+    if (!playing || !wl) {
+      return;
+    }
+    let lock: any = null;
+    let active = true;
+    const acquire = async () => {
+      try {
+        lock = await wl.request("screen");
+        setWake(true);
+        lock.addEventListener?.("release", () => setWake(false));
+      } catch {
+        setWake(false);
+      }
+    };
+    const onVis = () => {
+      if (active && document.visibilityState === "visible") acquire();
+    };
+    acquire();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      active = false;
+      document.removeEventListener("visibilitychange", onVis);
+      lock?.release?.();
+      setWake(false);
+    };
+  }, [playing]);
+
   const togglePlay = () => {
     const next = !playing;
     setPlaying(next);
@@ -81,7 +111,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   };
 
   return (
-    <div className="flex flex-col md:h-[calc(100dvh-64px)] short:h-[calc(100dvh-44px)]" data-testid="ruang-view">
+    <div className="flex flex-col md:h-[calc(100dvh-65px)] short:h-[calc(100dvh-45px)]" data-testid="ruang-view" data-wakelock={wake ? "on" : "off"}>
       <div className="flex flex-col md:min-h-0 md:flex-1 md:flex-row short:min-h-0 short:flex-1">
         <div
           ref={stageRef}
@@ -104,7 +134,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
             </p>
             <div className="flex shrink-0 gap-2">
               {data.music_url && (
-                <button onClick={() => setMusicOn((m) => !m)} className={`${iconBtn} ${musicOn ? "text-brass" : ""}`} title={musicOn ? "Matikan musik" : "Putar musik"} data-testid="music-toggle-btn">
+                <button onClick={() => setMusicOn((m) => !m)} className={`${iconBtn} ${musicOn ? "text-brass" : ""}`} title={`${musicOn ? "Matikan musik" : "Putar musik"}${data.music_title ? ` — ${data.music_title}` : ""}`} data-testid="music-toggle-btn">
                   {musicOn ? <Music2 size={15} /> : <VolumeX size={15} />}
                 </button>
               )}
@@ -133,6 +163,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           <div key={`o-${scene.id}`} className="glass absolute bottom-3 left-3 z-20 hidden max-w-[45%] px-3 py-2 short:block fade-up" data-testid="landscape-story-overlay">
             <p className="eyebrow text-[9px] text-brass">{pad(index + 1)} / {pad(tour.length)}</p>
             <p className="truncate text-sm">{scene.title || "Tanpa judul"}</p>
+            {musicOn && data.music_title && <p className="truncate text-[9px] text-paper/50" data-testid="music-credit-landscape">♪ {data.music_title}</p>}
           </div>
         </div>
 
@@ -144,6 +175,9 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
             <h2 className="display mt-4 text-2xl leading-snug md:text-[28px]" data-testid="story-title">{scene.title || "Tanpa judul"}</h2>
             {scene.description && <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-paper/65" data-testid="story-description">{scene.description}</p>}
           </div>
+          {musicOn && data.music_title && (
+            <p className="eyebrow mt-6 text-[9px] text-paper/45" data-testid="music-credit">Musik: {data.music_title}</p>
+          )}
           {floor?.plan_url && (
             <div className="mt-auto hidden pt-10 md:block" data-testid="mini-plan">
               <p className="eyebrow mb-3 text-paper/45">{floor.name}</p>

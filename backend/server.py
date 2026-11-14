@@ -409,19 +409,19 @@ async def delete_project(pid: str, _: dict = Depends(admin_only)):
 
 
 TRACKS = [
+    {"id": "backbay-lounge", "title": "Backbay Lounge", "artist": "Kevin MacLeod", "genre": "Lounge", "license": "CC BY 3.0"},
+    {"id": "airport-lounge", "title": "Airport Lounge", "artist": "Kevin MacLeod", "genre": "Lounge", "license": "CC BY 3.0"},
+    {"id": "casa-bossa-nova", "title": "Casa Bossa Nova", "artist": "Kevin MacLeod", "genre": "Lounge", "license": "CC BY 3.0"},
+    {"id": "zazie", "title": "Zazie", "artist": "Kevin MacLeod", "genre": "Lounge", "license": "CC BY 3.0"},
+    {"id": "kool-kats", "title": "Kool Kats", "artist": "Kevin MacLeod", "genre": "Lounge", "license": "CC BY 3.0"},
     {"id": "gymnopedie-1", "title": "Gymnopédie No. 1", "artist": "Erik Satie", "genre": "Klasik", "license": "CC0"},
     {"id": "clair-de-lune", "title": "Clair de Lune", "artist": "Claude Debussy", "genre": "Klasik", "license": "Public domain"},
     {"id": "nocturne-op9-2", "title": "Nocturne Op. 9 No. 2", "artist": "Frédéric Chopin", "genre": "Klasik", "license": "Public domain"},
     {"id": "gnossienne-1", "title": "Gnossienne No. 1", "artist": "Erik Satie", "genre": "Klasik", "license": "Public domain"},
     {"id": "air-bach", "title": "Air on the G String", "artist": "J. S. Bach", "genre": "Klasik", "license": "Public domain"},
-    {"id": "chill-out-theme", "title": "Chill Out Theme", "artist": "Komiku", "genre": "Kontemporer", "license": "CC0"},
-    {"id": "softly", "title": "Softly", "artist": "Loyalty Freak Music", "genre": "Kontemporer", "license": "CC0"},
-    {"id": "meekness", "title": "Meekness", "artist": "Kai Engel", "genre": "Kontemporer", "license": "CC BY 4.0"},
-    {"id": "chill-breeze", "title": "Chill Breeze", "artist": "Evan Schaeffer", "genre": "Kontemporer", "license": "CC BY 4.0"},
-    {"id": "lofi-upbeat", "title": "Lofi Hip Hop Upbeat", "artist": "Raspberrymusic", "genre": "Kontemporer", "license": "CC BY 4.0"},
 ]
 TRACK_IDS = {t["id"]: t for t in TRACKS}
-DEFAULT_TRACK = "gymnopedie-1"
+DEFAULT_TRACK = "backbay-lounge"
 
 
 def project_music(p: dict) -> dict:

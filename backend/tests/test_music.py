@@ -9,7 +9,10 @@ from pymongo import MongoClient
 from conftest import BASE_URL, USERS, upload
 from test_media import make_wav
 
-TRACKS = ["gymnopedie-1", "clair-de-lune", "nocturne-op9-2", "gnossienne-1", "air-bach"]
+CLASSIC = ["gymnopedie-1", "clair-de-lune", "nocturne-op9-2", "gnossienne-1", "air-bach"]
+CONTEMP = ["chill-out-theme", "softly", "meekness", "chill-breeze", "lofi-upbeat"]
+TRACKS = CLASSIC + CONTEMP
+LICENSES = {"chill-out-theme": "CC0", "softly": "CC0", "meekness": "CC BY 4.0", "chill-breeze": "CC BY 4.0", "lofi-upbeat": "CC BY 4.0"}
 
 
 # ---- Track list + static mp3 serving ----
@@ -21,7 +24,10 @@ class TestTracks:
         assert d["default"] == "gymnopedie-1"
         assert [t["id"] for t in d["tracks"]] == TRACKS
         for t in d["tracks"]:
-            assert t["url"] == f"/music/{t['id']}.mp3" and t["title"] and t["artist"]
+            assert t["url"] == f"/music/{t['id']}.mp3" and t["title"] and t["artist"] and t["license"]
+            assert t["genre"] == ("Klasik" if t["id"] in CLASSIC else "Kontemporer")
+            if t["id"] in LICENSES:
+                assert t["license"] == LICENSES[t["id"]]
 
     def test_tracks_unauth(self):
         assert requests.get(f"{BASE_URL}/api/music/tracks", timeout=30).status_code == 401
@@ -63,6 +69,18 @@ class TestMusicChoice:
         assert r.status_code == 200 and r.json()["music_source"] == "system" and r.json()["music_track"] == "clair-de-lune"
         d = designer.get(f"/api/projects/{pid}/draft").json()
         assert d["music_url"] == "/music/clair-de-lune.mp3" and "Debussy" in d["music_title"]
+
+    def test_03b_contemporary_cc_by_credit(self, designer):
+        pid = self.state["pid"]
+        r = designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "meekness"})
+        assert r.status_code == 200 and r.json()["music_track"] == "meekness"
+        d = designer.get(f"/api/projects/{pid}/view?mode=draft").json()
+        assert d["music_url"] == "/music/meekness.mp3"
+        assert d["music_title"] == "Meekness · Kai Engel (CC BY 4.0)"
+        designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "softly"})
+        d = designer.get(f"/api/projects/{pid}/draft").json()
+        assert d["music_url"] == "/music/softly.mp3" and "CC" not in d["music_title"]
+        designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "clair-de-lune"})
 
     def test_04_invalid(self, designer, client_user):
         pid = self.state["pid"]
