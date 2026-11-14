@@ -137,8 +137,8 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />
           <div className="absolute inset-0 bg-ink/35" />
           <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-2 md:items-start md:gap-4 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
-            <p className="eyebrow min-w-0 truncate text-[9.5px] text-paper/80 md:text-[10.5px]">
-              {floor?.name} <span className="text-brass">/</span> {room?.name}
+            <p className="eyebrow min-w-0 truncate text-[9.5px] tracking-[0.2em] text-paper/80 md:text-[10.5px] md:tracking-[0.28em]">
+              <span className="hidden sm:inline">{floor?.name} <span className="text-brass">/</span> </span>{room?.name}
               {scene.area && scene.area !== room?.name ? <span className="text-paper/50"> · {scene.area}</span> : null}
             </p>
             <div className="flex shrink-0 gap-1.5 md:gap-2">

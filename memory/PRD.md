@@ -22,6 +22,15 @@ User choices: Phase 1–2 first; watermark INERRE logo only; clients mostly on p
 - Client viewer: Ruang / Denah / Layout 3D per spec, watermark, deep link, mobile bottom sheets, preload, no right-click/drag on images.
 - Sample project "Contoh: Apartemen Kemang" (placeholder content) published to test client.
 
+## Iteration 2 (2026-11-14)
+- Layout 3D tab replaced by "Presentasi" tab (PDF rendered to WebP pages, watermark, tab only shown when a PDF exists). Layout 3D editor section removed.
+- Tour music: built-in library (Lounge by Kevin MacLeod CC BY 3.0 — default Backbay Lounge; Klasik public domain) served from /frontend/public/music, or own upload, or none. Credit shown in viewer. Music continues across tabs; part of the revision snapshot.
+- Plan pins: per-scene colours (pinColor), small px-based dots with numbers, small cones; same colours in the camera editor.
+- Denah tab locked to viewport (no page scroll, limitToBounds).
+- Phone landscape ("short" screen): maximised stage, compact masthead, overlay story. Portrait: compact topline (32px buttons + Denah icon), stage height hugs the render.
+- Screen Wake Lock while the tour is playing.
+- Sample project republished as Revisi 03.
+
 ## Backlog
 - P0 (Phase 3): revision history dropdown (read-only), A/B alternative groups + ALT hotspot, per-room & final approval with locking, pinned comments per revision, Resend emails (publish, comment, approval), watermark removed after approval.
 - P1 (Phase 4): mobile polish (touch tour reorder), deploy, signed URLs bound to user session.

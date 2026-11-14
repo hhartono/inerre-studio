@@ -1,0 +1,25 @@
+{
+  "summary": "Iteration 7, frontend only. Tested the compact portrait Ruang layout, the landscape and desktop layouts, and the iteration_6 fixes, all with the client user on the sample project (read only). Portrait results at 390x844, 375x667 and 360x740: scene-topline is a single 48px row. The eyebrow is 9.5px. music, autoplay, fullscreen and mobile-denah are each 32x32 in one row. landscape-denah-btn is hidden. The stage is 286/276/267px, which matches (100vw-16)/1.6+52, and the image sits right under the topline with no empty area. prev/next are 32px. The story panel and thumb rail follow directly. scrollHeight == innerHeight at all three sizes. Stage height changes per scene aspect on 390x844: 286, 333, 249, then 520 for the portrait scenes 04-06 (capped by 62vh). The page still does not scroll on any scene. Next, prev, wrap-around, swipe, hotspot, Denah sheet (opens, Escape closes), autoplay with backbay-lounge audio, music toggle and fullscreen (fullscreenElement = ruang-stage) all work. 844x390: 40px buttons, mobile-denah-btn hidden, landscape-denah-btn visible bottom-right, overlay shown, 390/390 with no scroll. 1920x800: 40px buttons, story aside, mini-plan, no Denah button, 800/800. Wake lock was tested with a fake navigator.wakeLock. Play gives 'on'. Pause gives 'off' and the lock is released. In the race test (400ms request delay, play then pause after 80ms) the late lock is released and the state stays 'off'. On visibilitychange the old lock is released before the new one is taken. MusicPicker (admin, TEST_ project, draft response changed with page.route to music_track='meekness'): Backbay Lounge is the only active row. No page errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Ruang portrait 375/360 wide", "issues": ["The room-name eyebrow is cut short ('LANTAI 1 / RUANG KELUA…') because of the wide letter-spacing and four 32px buttons. Acceptable, but the floor prefix could be dropped or the tracking reduced on small screens so the room name stays readable."]},
+      {"screen": "Ruang portrait 390x844", "issues": ["About 270px of empty dark space under the thumb rail on tall phones with landscape renders. The layout is still correct and meets the no-scroll goal."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": ["Optional: keep the room name readable on 360-375px screens (shorter eyebrow or smaller letter-spacing)."],
+  "critical_code_review_comments": [
+    "RuangStage: the wake-lock fix is correct (active check after await; release before re-acquire in onVis).",
+    "MusicPicker: unknown track ids now fall back to the default. api.get('/music/tracks') still has no catch or error state (carried over).",
+    "MusicPicker: the JSX indentation inside tracks.map is still off. Cosmetic only."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (frontend only)", "frontend": "100%"},
+  "seed_data_creation": "Created the TEST_UI Media T1 project (c2353d17d5994119b264fac9809f4bfb) via setup_ui_media.py nomedia, then deleted it (404 confirmed). The sample project was only read.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sample project scene aspects: 01 1.6, 02 about 1.3, 03 about 1.9; 04-06 are portrait (stage capped at 62vh). The fake wakeLock in add_init_script with window.__wlDelay is handy for race tests. To test MusicPicker with a removed track, change the /api/projects/{pid}/draft response with page.route (the backend rejects removed ids). Ticket files: write ticket.py output to /tmp and read it in the script."
+}
