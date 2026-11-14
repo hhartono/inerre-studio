@@ -1,4 +1,4 @@
-# INERRE iteration_4: built-in music library, music-choice API, publish snapshot, legacy revisions
+# INERRE iteration_4/6: built-in music library (Lounge + Klasik), music-choice API, publish snapshot, legacy revisions
 from pathlib import Path
 
 import pytest
@@ -10,9 +10,9 @@ from conftest import BASE_URL, USERS, upload
 from test_media import make_wav
 
 CLASSIC = ["gymnopedie-1", "clair-de-lune", "nocturne-op9-2", "gnossienne-1", "air-bach"]
-CONTEMP = ["chill-out-theme", "softly", "meekness", "chill-breeze", "lofi-upbeat"]
-TRACKS = CLASSIC + CONTEMP
-LICENSES = {"chill-out-theme": "CC0", "softly": "CC0", "meekness": "CC BY 4.0", "chill-breeze": "CC BY 4.0", "lofi-upbeat": "CC BY 4.0"}
+LOUNGE = ["backbay-lounge", "airport-lounge", "casa-bossa-nova", "zazie", "kool-kats"]
+REMOVED = ["chill-out-theme", "softly", "meekness", "chill-breeze", "lofi-upbeat"]
+TRACKS = LOUNGE + CLASSIC
 
 
 # ---- Track list + static mp3 serving ----
@@ -21,13 +21,18 @@ class TestTracks:
         r = client_user.get("/api/music/tracks")
         assert r.status_code == 200
         d = r.json()
-        assert d["default"] == "gymnopedie-1"
+        assert d["default"] == "backbay-lounge"
         assert [t["id"] for t in d["tracks"]] == TRACKS
         for t in d["tracks"]:
             assert t["url"] == f"/music/{t['id']}.mp3" and t["title"] and t["artist"] and t["license"]
-            assert t["genre"] == ("Klasik" if t["id"] in CLASSIC else "Kontemporer")
-            if t["id"] in LICENSES:
-                assert t["license"] == LICENSES[t["id"]]
+            assert t["genre"] == ("Klasik" if t["id"] in CLASSIC else "Lounge")
+            if t["id"] in LOUNGE:
+                assert t["artist"] == "Kevin MacLeod" and t["license"] == "CC BY 3.0"
+
+    @pytest.mark.parametrize("tid", REMOVED)
+    def test_removed_mp3_gone(self, tid):
+        r = requests.get(f"{BASE_URL}/music/{tid}.mp3", headers={"Range": "bytes=0-99"}, timeout=30)
+        assert not (r.status_code in (200, 206) and r.headers.get("content-type", "").startswith("audio/mpeg"))
 
     def test_tracks_unauth(self):
         assert requests.get(f"{BASE_URL}/api/music/tracks", timeout=30).status_code == 401
@@ -60,8 +65,8 @@ class TestMusicChoice:
         pid = self.state["pid"]
         for path in (f"/api/projects/{pid}/draft", f"/api/projects/{pid}/view?mode=draft"):
             d = designer.get(path).json()
-            assert d["music_url"] == "/music/gymnopedie-1.mp3", path
-            assert "Gymnop" in d["music_title"] and "Satie" in d["music_title"]
+            assert d["music_url"] == "/music/backbay-lounge.mp3", path
+            assert d["music_title"] == "Backbay Lounge · Kevin MacLeod (CC BY 3.0)"
 
     def test_03_switch_track(self, designer):
         pid = self.state["pid"]
@@ -70,17 +75,28 @@ class TestMusicChoice:
         d = designer.get(f"/api/projects/{pid}/draft").json()
         assert d["music_url"] == "/music/clair-de-lune.mp3" and "Debussy" in d["music_title"]
 
-    def test_03b_contemporary_cc_by_credit(self, designer):
+    def test_03b_lounge_cc_by_credit(self, designer):
         pid = self.state["pid"]
-        r = designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "meekness"})
-        assert r.status_code == 200 and r.json()["music_track"] == "meekness"
+        r = designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "zazie"})
+        assert r.status_code == 200 and r.json()["music_track"] == "zazie"
         d = designer.get(f"/api/projects/{pid}/view?mode=draft").json()
-        assert d["music_url"] == "/music/meekness.mp3"
-        assert d["music_title"] == "Meekness · Kai Engel (CC BY 4.0)"
-        designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "softly"})
+        assert d["music_url"] == "/music/zazie.mp3"
+        assert d["music_title"] == "Zazie · Kevin MacLeod (CC BY 3.0)"
+        designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "gnossienne-1"})
         d = designer.get(f"/api/projects/{pid}/draft").json()
-        assert d["music_url"] == "/music/softly.mp3" and "CC" not in d["music_title"]
+        assert d["music_url"] == "/music/gnossienne-1.mp3" and "CC" not in d["music_title"]
         designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "clair-de-lune"})
+
+    def test_03c_removed_tracks_rejected_and_fallback(self, designer):
+        pid = self.state["pid"]
+        for tid in REMOVED:
+            assert designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": tid}).status_code == 400
+        env = dotenv_values(Path(__file__).resolve().parents[1] / ".env")
+        db = MongoClient(env["MONGO_URL"])[env["DB_NAME"]]
+        db.projects.update_one({"id": pid}, {"$set": {"music_track": "meekness", "music_source": "system"}})
+        d = designer.get(f"/api/projects/{pid}/draft").json()
+        assert d["music_url"] == "/music/backbay-lounge.mp3"
+        assert designer.put(f"/api/projects/{pid}/music-choice", json={"source": "system", "track": "clair-de-lune"}).status_code == 200
 
     def test_04_invalid(self, designer, client_user):
         pid = self.state["pid"]

@@ -1,0 +1,27 @@
+{
+  "summary": "Iteration 6 tested the lounge music library, the viewer music credit, the tour wake lock, the 1px overflow fix and the Revisi 03 sample. Backend: 67 passed, 1 skipped. test_music.py now expects LOUNGE + CLASSIC with default backbay-lounge, removed tracks rejected with 400, the DB fallback from 'meekness' to backbay-lounge, and removed mp3s no longer served as audio. test_media.py now expects backbay-lounge as the default. All 10 mp3 files return 200 audio/mpeg; meekness.mp3 now returns the SPA html. Frontend (client, sample project): badge 'Revisi 03'; autoplay plays backbay-lounge.mp3; music-credit shows 'Musik: Backbay Lounge · Kevin MacLeod (CC BY 3.0)'; the music-toggle-btn title includes the credit; music-credit-landscape is visible at 844x390. scrollHeight equals innerHeight at 1920x800 (800/800), 844x390 (390/390) and 390x844. Real Chromium headless denies the wake lock (NotAllowedError); the app handles this and stays 'off' with no console errors. With a fake navigator.wakeLock: play gives 'on'; a system release gives 'off'; visibilitychange gives 'on' again; pause gives 'off' and the lock is released. Studio MusicPicker (designer, TEST_ project): Lounge header then Klasik header; 10 rows; CC BY 3.0 tag on lounge tracks; Default on Backbay Lounge (active by default); the preview button switches to the pause icon; picking Kool Kats sends PUT music-choice (200), the row becomes active and the preview viewer credit shows Kool Kats.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "RuangStage wake-lock effect", "issue": "Race condition. If the tour is paused before wakeLock.request() resolves (quick play then pause), the effect cleanup runs while lock is still null. The request then resolves, calls setWake(true) and keeps the lock: data-wakelock stays 'on' while paused and the screen lock leaks. Reproduced with a fake wakeLock that has a 150ms delay: autoplay title is 'Putar tur' (paused), data-wakelock='on', lock released=false. Fix: in acquire(), after the await, if (!active) { l.release(); return; }. Also release the previous lock before re-acquiring in onVis.", "selector": "[data-testid=ruang-view][data-wakelock]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_music.py", "/app/backend/tests/test_media.py", "/app/backend/tests/test_inerre_api.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "RuangStage wake lock: ignore or release a lock that resolves after cleanup (check the `active` flag after the await, before setWake(true)).",
+    "Minor: in MusicPicker, `track = p.music_track || def` means a project that still stores a removed track id (e.g. 'meekness') shows NO active row, although the backend falls back to backbay-lounge. Treat an unknown id as the default, e.g. tracks.some(t => t.id === p.music_track) ? p.music_track : def."
+  ],
+  "critical_code_review_comments": [
+    "RuangStage wake lock: no `active` check after `await wl.request` (race described above). onVis can also call acquire() while a lock is still held, which overwrites `lock` without releasing it. This is harmless in browsers (the lock is auto-released when the page is hidden) but fragile.",
+    "MusicPicker: api.get('/music/tracks') still has no catch or error state (carried over from iteration 5).",
+    "MusicPicker: the JSX indentation inside tracks.map is still off. Cosmetic only."
+  ],
+  "updated_files": ["/app/backend/tests/test_music.py", "/app/backend/tests/test_media.py"],
+  "success_rate": {"backend": "100%", "frontend": "95%"},
+  "seed_data_creation": "Created the TEST_T1 Iter6 UI project (9ff79be0e83440aa9d0066ba97f72128) via /tmp/mk.py and deleted it with check_ui_project.py delete (404 confirmed). The pytest TEST_ projects clean up after themselves. The sample project was only read (no changes).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_music.py has LOUNGE + CLASSIC + REMOVED lists, with default backbay-lounge. Headless Chromium denies navigator.wakeLock (NotAllowedError). To test the 'on' path, override Navigator.prototype.wakeLock with a fake in add_init_script. Each ticket.py ticket can be used only once."
+}

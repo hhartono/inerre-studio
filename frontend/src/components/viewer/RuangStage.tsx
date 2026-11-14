@@ -19,7 +19,7 @@ interface Props {
   setMusicOn: (fn: boolean | ((m: boolean) => boolean)) => void;
 }
 
-const iconBtn = "glass inline-flex h-10 w-10 items-center justify-center text-paper transition-colors hover:text-brass";
+const iconBtn = "glass inline-flex h-8 w-8 items-center justify-center text-paper transition-colors hover:text-brass md:h-10 md:w-10";
 
 export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusicOn }: Props) {
   const scene = tour[index];
@@ -79,15 +79,23 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
     let active = true;
     const acquire = async () => {
       try {
-        lock = await wl.request("screen");
+        const l = await wl.request("screen");
+        if (!active) {
+          l.release?.();
+          return;
+        }
+        lock = l;
         setWake(true);
-        lock.addEventListener?.("release", () => setWake(false));
+        l.addEventListener?.("release", () => setWake(false));
       } catch {
         setWake(false);
       }
     };
     const onVis = () => {
-      if (active && document.visibilityState === "visible") acquire();
+      if (active && document.visibilityState === "visible") {
+        lock?.release?.();
+        acquire();
+      }
     };
     acquire();
     document.addEventListener("visibilitychange", onVis);
@@ -115,7 +123,8 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
       <div className="flex flex-col md:min-h-0 md:flex-1 md:flex-row short:min-h-0 short:flex-1">
         <div
           ref={stageRef}
-          className="relative h-[58vh] shrink-0 overflow-hidden bg-ink md:h-auto md:flex-1 short:h-auto short:flex-1"
+          className="relative h-[var(--stage-h)] shrink-0 overflow-hidden bg-ink transition-[height] duration-500 md:h-auto md:flex-1 short:h-auto short:flex-1"
+          style={{ "--stage-h": `min(62vh, calc((100vw - 16px) / ${scene.aspect || 1.5} + 52px))` } as React.CSSProperties}
           onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
           onTouchEnd={(e) => {
             if (touchX.current === null) return;
@@ -127,12 +136,12 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
         >
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />
           <div className="absolute inset-0 bg-ink/35" />
-          <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 px-4 py-3 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
-            <p className="eyebrow min-w-0 truncate text-paper/80">
+          <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-2 md:items-start md:gap-4 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
+            <p className="eyebrow min-w-0 truncate text-[9.5px] text-paper/80 md:text-[10.5px]">
               {floor?.name} <span className="text-brass">/</span> {room?.name}
               {scene.area && scene.area !== room?.name ? <span className="text-paper/50"> · {scene.area}</span> : null}
             </p>
-            <div className="flex shrink-0 gap-2">
+            <div className="flex shrink-0 gap-1.5 md:gap-2">
               {data.music_url && (
                 <button onClick={() => setMusicOn((m) => !m)} className={`${iconBtn} ${musicOn ? "text-brass" : ""}`} title={`${musicOn ? "Matikan musik" : "Putar musik"}${data.music_title ? ` — ${data.music_title}` : ""}`} data-testid="music-toggle-btn">
                   {musicOn ? <Music2 size={15} /> : <VolumeX size={15} />}
@@ -144,9 +153,12 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               <button onClick={toggleFs} className={iconBtn} title="Layar penuh" data-testid="fullscreen-btn">
                 <Maximize2 size={15} />
               </button>
+              <button onClick={() => setSheet(true)} className={`${iconBtn} md:hidden short:hidden`} title="Denah" data-testid="mobile-denah-btn">
+                <MapIcon size={15} />
+              </button>
             </div>
           </div>
-          <div className="absolute inset-0 px-2 pb-10 pt-16 md:px-16 md:pb-6 md:pt-[72px] short:px-14 short:pb-1.5 short:pt-1.5">
+          <div className="absolute inset-0 px-2 pb-1 pt-12 md:px-16 md:pb-6 md:pt-[72px] short:px-14 short:pb-1.5 short:pt-1.5">
             <div className="relative h-full w-full">
               <StageImage scene={scene} valid={valid} onGo={goTo} />
             </div>
@@ -157,7 +169,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           <button onClick={() => go(1)} className={`${iconBtn} absolute right-2 top-1/2 z-20 -translate-y-1/2 md:right-6 md:h-12 md:w-12`} data-testid="next-scene-btn">
             <ChevronRight size={18} />
           </button>
-          <button onClick={() => setSheet(true)} className="glass eyebrow absolute bottom-3 right-3 z-20 inline-flex items-center gap-2 px-4 py-2.5 text-paper md:hidden short:inline-flex" data-testid="mobile-denah-btn">
+          <button onClick={() => setSheet(true)} className="glass eyebrow absolute bottom-3 right-3 z-20 hidden items-center gap-2 px-4 py-2.5 text-paper short:inline-flex" data-testid="landscape-denah-btn">
             <MapIcon size={13} /> Denah
           </button>
           <div key={`o-${scene.id}`} className="glass absolute bottom-3 left-3 z-20 hidden max-w-[45%] px-3 py-2 short:block fade-up" data-testid="landscape-story-overlay">
@@ -167,13 +179,13 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           </div>
         </div>
 
-        <aside className="px-5 py-7 md:flex md:w-[380px] md:flex-col md:overflow-y-auto md:border-l md:border-paper/10 md:px-8 md:py-10 short:hidden" data-testid="story-panel">
+        <aside className="px-5 py-4 md:flex md:w-[380px] md:flex-col md:overflow-y-auto md:border-l md:border-paper/10 md:px-8 md:py-10 short:hidden" data-testid="story-panel">
           <div key={scene.id} className="fade-up">
             <p className="eyebrow text-brass" data-testid="story-number">
               {pad(index + 1)} <span className="text-paper/35">/ {pad(tour.length)}</span>
             </p>
-            <h2 className="display mt-4 text-2xl leading-snug md:text-[28px]" data-testid="story-title">{scene.title || "Tanpa judul"}</h2>
-            {scene.description && <p className="mt-4 whitespace-pre-line text-sm leading-relaxed text-paper/65" data-testid="story-description">{scene.description}</p>}
+            <h2 className="display mt-2 text-xl leading-snug md:mt-4 md:text-[28px]" data-testid="story-title">{scene.title || "Tanpa judul"}</h2>
+            {scene.description && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-paper/65 md:mt-4" data-testid="story-description">{scene.description}</p>}
           </div>
           {musicOn && data.music_title && (
             <p className="eyebrow mt-6 text-[9px] text-paper/45" data-testid="music-credit">Musik: {data.music_title}</p>

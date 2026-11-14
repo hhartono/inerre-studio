@@ -35,7 +35,7 @@ export function MusicPicker() {
   const [busy, setBusy] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
   const source = p.music_source || (p.music_file_id ? "upload" : "system");
-  const track = p.music_track || def;
+  const track = tracks.some((t) => t.id === p.music_track) ? p.music_track : def;
 
   useEffect(() => {
     api.get("/music/tracks").then((r) => {
