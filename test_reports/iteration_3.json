@@ -1,0 +1,30 @@
+{
+  "summary": "Iteration 3 tested the Denah viewport lock, per-pin colours with smaller dots and cones, the fixes from iteration_2, and regressions. Backend: 40 pytest cases passed and 1 was skipped (the last-admin guard). test_media.py gained new checks: malformed or reversed Range headers ('bytes=abc-', 'bytes=10-5', 'bytes=-abc', 'bytes=5-x') return 416 with 'bytes */size', and an empty music upload returns 400 'File kosong'. All of these pass. Frontend (Playwright with Clerk tickets, 390x844 and 1920x800): the Denah root becomes 'flex h-[100dvh] flex-col overflow-hidden'. scrollY stays 0 after mouse wheel, window.scrollTo(0,500) and a swipe-up drag, scrollHeight equals innerHeight, and the masthead (y=0) and plan stay visible. limitToBounds works: dragging at scale 1 leaves translate(0,0). Zoom in (scale 1.5) and reset (scale 1) work. Pin click opens Ruang at 04/06. The 'Daftar area' sheet opens, shows the coloured dots and opens a scene. Leaving Denah drops the lock (min-h-screen), and the Presentasi tab scrolls (scrollY 237). Pins: each has its own colour from the palette, and the cone fill matches the dot. Dot radius is 7.5px on mobile Denah, the Ruang > Denah sheet and the desktop mini-plan, and 9px on the wide desktop plan. The active pin is 1.2x bigger with a white ring. Numbers 01-06 are drawn on top and readable in all four places. Area-list colour dots match the pins. Music keeps playing across Ruang -> Denah -> Presentasi -> Ruang (currentTime kept rising). music-toggle-btn off pauses it, and autoplay on/off starts and stops it. The sample project still shows only the Ruang and Denah tabs. Next-scene, hotspots (2) and autoplay advancing all still work. ONE BUG: the PDF watermark fix does not work, and the watermark is still invisible on white PDF pages.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Watermark (PresentationView / PDF pages)", "issue": "The watermark is still invisible on white PDF pages. The wrapper div is 'absolute z-[5]', and a positioned element with a z-index creates its own stacking context. That context isolates the child spans, so their mix-blend-difference only blends with the wrapper's transparent backdrop, not with the PDF image, and white/20% on white stays invisible. Confirmed: a screenshot of pdf-page-1 shows no watermark. After setting wrapper zIndex='auto' in devtools, the bottom-right label appeared, but the centre 'INERRE' was still very faint at 0.2 alpha.", "selector": "[data-testid='pdf-view'] [data-testid='render-watermark']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Denah pins on a cream plan", "issues": ["The pale palette colours (#f2cc8f pin 04, #a3c4f3, #c6b38b) at 0.5 fill opacity are hard to see on the cream/white plan, so cone 04 barely shows. Consider more saturated colours or a darker cone stroke.", "#e07a5f (01) and #e5989b (06) look alike."]},
+      {"screen": "Presentasi page counter", "issues": ["The '/ 03' part (text-paper/45) is still dim, though '01' (text-paper/65) is fine."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_media.py", "/app/backend/tests/test_inerre_api.py", "/app/test_reports/pytest/pytest_results_it3.xml"],
+  "action_items": [
+    "Fix the Watermark: put mix-blend-difference on the wrapper div itself, or remove z-[5] / use 'isolation:auto' so the spans blend with the image. Raise the centre text alpha (around white/35-40) so it shows on white PDF pages. Re-verify on the Ruang renders too.",
+    "Optional: use more saturated pin colours for contrast on light plans."
+  ],
+  "critical_code_review_comments": [
+    "Watermark.tsx: a z-indexed absolute wrapper isolates mix-blend children (see the UI bug above).",
+    "storage.get_object: recomputing sum(len(v)) over the whole cache on every insert is O(n). It is fine at 200 entries, but a running byte counter would be cleaner.",
+    "PlanView: number fontSize equals the dot radius (7.5px/9px), and the dot diameter is 15px, so 2-digit numbers just fit. 3-digit tour numbers (>99) would overflow, which is an edge case."
+  ],
+  "updated_files": ["/app/backend/tests/test_media.py"],
+  "success_rate": {"backend": "100% (40 passed, 1 skipped)", "frontend": "95% (watermark fix not effective)"},
+  "seed_data_creation": "A TEST_UI Media T1 project (4735544b3b264a0b8a2843065394387f) was created via setup_ui_media.py and deleted at the end. The sample project was not modified.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use python /app/backend/tests/ticket.py client to get a sign-in ticket (one per browser session). Use setup_ui_media.py to create a media project and 'setup_ui_media.py delete <pid>' to remove it. Only the watermark visibility on the PDF needs a recheck."
+}

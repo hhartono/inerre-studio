@@ -82,6 +82,16 @@ class TestMedia:
         assert r.status_code == 416
         # tampered signature
         assert requests.get(url.replace("/audio?", "/web?"), timeout=30).status_code == 403
+        # iteration_3: malformed / reversed ranges -> 416 (not 500 / empty 206)
+        for bad in ["bytes=abc-", "bytes=10-5", "bytes=-abc", "bytes=5-x"]:
+            r = requests.get(url, headers={"Range": bad}, timeout=60)
+            assert r.status_code == 416, (bad, r.status_code)
+            assert r.headers.get("content-range") == f"bytes */{size}"
+
+    def test_04b_music_empty_file(self, designer):
+        # iteration_3: empty audio -> 400 'File kosong'
+        r = designer.post(f"/api/projects/{self.state['pid']}/music", files={"file": ("TEST_empty.mp3", b"", "audio/mpeg")})
+        assert r.status_code == 400 and r.json()["detail"] == "File kosong"
 
     def test_05_pdf_reject_non_pdf(self, designer):
         pid = self.state["pid"]

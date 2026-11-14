@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { api, errMsg, img } from "@/lib/api";
 import { PLAN_W, clamp01, conePath, planHeight } from "@/lib/geometry";
+import { pinColor } from "@/lib/viewer";
 import { useEditor } from "@/components/editor/EditorContext";
 import { btnGhost } from "@/components/editor/ui";
 import type { Camera, Floor } from "@/types";
@@ -18,6 +19,7 @@ export function PlanCameraEditor({ floor }: { floor: Floor }) {
   const svgRef = useRef<SVGSVGElement>(null);
   const sel = scenes.find((s) => s.id === selId);
   const H = planHeight(floor.plan_aspect);
+  const num = (id: string) => data.tour_order.indexOf(id) + 1;
 
   useEffect(() => {
     setLive(null);
@@ -76,7 +78,8 @@ export function PlanCameraEditor({ floor }: { floor: Floor }) {
             <p className="eyebrow mb-2 text-paper/40">{r.name}</p>
             {scenes.filter((s) => s.room_id === r.id).map((s) => (
               <button key={s.id} onClick={() => setSelId(s.id)} className={`flex w-full items-center gap-2 px-2 py-1.5 text-left text-xs transition-colors ${s.id === selId ? "bg-surface text-brass" : "text-paper/65 hover:text-paper"}`} data-testid={`camera-scene-${s.id}`}>
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${s.camera ? "bg-brass" : "bg-paper/20"}`} />
+                <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: s.camera ? pinColor(num(s.id)) : "rgba(238,233,223,0.2)" }} />
+                <span className="eyebrow w-5 shrink-0 text-[9px] text-paper/40">{String(num(s.id)).padStart(2, "0")}</span>
                 <span className="truncate">{s.title || "Tanpa judul"}</span>
               </button>
             ))}
@@ -92,10 +95,25 @@ export function PlanCameraEditor({ floor }: { floor: Floor }) {
               const c = cam(s.id);
               if (!c) return null;
               const active = s.id === selId;
+              const color = pinColor(num(s.id));
               return (
-                <g key={s.id} onPointerDown={(e) => { if (!active) { e.stopPropagation(); setSelId(s.id); } }} style={{ opacity: active ? 1 : 0.45 }} data-testid={`camera-pin-${s.id}`}>
-                  <path d={conePath(c.x * PLAN_W, c.y * H, c.angle, c.fov, 95)} fill="#c6b38b" fillOpacity={active ? 0.45 : 0.2} stroke="#c6b38b" strokeWidth={1.5} />
-                  <circle cx={c.x * PLAN_W} cy={c.y * H} r={active ? 13 : 9} fill={active ? "#c6b38b" : "#171713"} stroke="#c6b38b" strokeWidth={3} />
+                <g key={`c-${s.id}`} style={{ opacity: active ? 1 : 0.7 }}>
+                  <path d={conePath(c.x * PLAN_W, c.y * H, c.angle, c.fov, active ? 80 : 60)} fill={color} fillOpacity={active ? 0.6 : 0.4} stroke={color} strokeWidth={2} />
+                </g>
+              );
+            })}
+            {scenes.map((s) => {
+              const c = cam(s.id);
+              if (!c) return null;
+              const active = s.id === selId;
+              const color = pinColor(num(s.id));
+              return (
+                <g key={s.id} onPointerDown={(e) => { if (!active) { e.stopPropagation(); setSelId(s.id); } }} className="cursor-pointer" data-testid={`camera-pin-${s.id}`}>
+                  <circle cx={c.x * PLAN_W} cy={c.y * H} r={active ? 17 : 13} fill={active ? "#ffffff" : "#171713"} />
+                  <circle cx={c.x * PLAN_W} cy={c.y * H} r={active ? 14 : 11} fill={color} />
+                  <text x={c.x * PLAN_W} y={c.y * H} dy="0.36em" textAnchor="middle" fontSize={active ? 13 : 11} fontWeight={700} fill="#171713" style={{ fontFamily: "Arial", pointerEvents: "none" }}>
+                    {String(num(s.id)).padStart(2, "0")}
+                  </text>
                 </g>
               );
             })}

@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { toast } from "sonner";
-import { api, errMsg, img, pad } from "@/lib/api";
+import { api, errMsg, pad } from "@/lib/api";
 import { useEditor } from "@/components/editor/EditorContext";
+import { MusicPicker } from "@/components/editor/MusicPicker";
 import { Label, Section, btn, btnDanger, btnGhost, inputCls } from "@/components/editor/ui";
 
 function FileButton({ label, accept, onFile, busy, testid }: { label: string; accept: string; onFile: (f: File) => void; busy?: boolean; testid: string }) {
@@ -17,37 +18,27 @@ function MediaSettings() {
   const { data, reload } = useEditor();
   const p = data.project;
   const [busy, setBusy] = useState("");
-  const upload = async (kind: "music" | "pdf", file: File) => {
+  const upload = async (kind: "pdf", file: File) => {
     setBusy(kind);
     const fd = new FormData();
     fd.append("file", file);
     try {
       await api.post(`/projects/${p.id}/${kind}`, fd, { timeout: 300000 });
-      toast.success(kind === "music" ? "Musik tur diunggah" : "PDF presentasi diunggah");
+      toast.success("PDF presentasi diunggah");
       await reload();
     } catch (e) {
       toast.error(errMsg(e));
     }
     setBusy("");
   };
-  const remove = async (kind: "music" | "pdf") => {
-    if (!window.confirm(kind === "music" ? "Hapus musik tur?" : "Hapus PDF presentasi?")) return;
+  const remove = async (kind: "pdf") => {
+    if (!window.confirm("Hapus PDF presentasi?")) return;
     await api.delete(`/projects/${p.id}/${kind}`).catch((e) => toast.error(errMsg(e)));
     reload();
   };
   return (
     <>
-      <Section title="Musik tur" aside={<FileButton label={p.music_name ? "Ganti musik" : "Unggah musik"} accept="audio/*" busy={busy === "music"} onFile={(f) => upload("music", f)} testid="upload-music" />}>
-        {data.music_url ? (
-          <div className="flex flex-wrap items-center gap-4" data-testid="music-current">
-            <audio controls src={img(data.music_url)} preload="none" className="h-10 max-w-full" />
-            <span className="text-sm text-paper/60">{p.music_name}</span>
-            <button onClick={() => remove("music")} className={btnDanger} data-testid="music-remove-btn">Hapus</button>
-          </div>
-        ) : (
-          <p className="text-sm text-paper/45">Lagu diputar saat klien menjalankan tur (mp3/m4a, maks 30 MB). Klien bisa mematikannya.</p>
-        )}
-      </Section>
+      <MusicPicker />
       <Section title="Presentasi PDF" aside={<FileButton label={p.pdf ? "Ganti PDF" : "Unggah PDF"} accept="application/pdf" busy={busy === "pdf"} onFile={(f) => upload("pdf", f)} testid="upload-pdf" />}>
         {p.pdf ? (
           <div className="flex flex-wrap items-center gap-4" data-testid="pdf-current">

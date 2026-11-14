@@ -184,6 +184,11 @@ class SceneUpdate(BaseModel):
     clear_camera: bool = False
 
 
+class MusicChoiceIn(BaseModel):
+    source: str
+    track: Optional[str] = None
+
+
 class TourIn(BaseModel):
     order: List[str]
 
@@ -403,10 +408,58 @@ async def delete_project(pid: str, _: dict = Depends(admin_only)):
     return {"ok": True}
 
 
-def media_urls(music_file_id, pdf) -> dict:
+TRACKS = [
+    {"id": "gymnopedie-1", "title": "Gymnopédie No. 1", "artist": "Erik Satie"},
+    {"id": "clair-de-lune", "title": "Clair de Lune", "artist": "Claude Debussy"},
+    {"id": "nocturne-op9-2", "title": "Nocturne Op. 9 No. 2", "artist": "Frédéric Chopin"},
+    {"id": "gnossienne-1", "title": "Gnossienne No. 1", "artist": "Erik Satie"},
+    {"id": "air-bach", "title": "Air on the G String", "artist": "J. S. Bach"},
+]
+TRACK_IDS = {t["id"]: t for t in TRACKS}
+DEFAULT_TRACK = "gymnopedie-1"
+
+
+def project_music(p: dict) -> dict:
+    source = p.get("music_source") or ("upload" if p.get("music_file_id") else "system")
+    return {"source": source, "track": p.get("music_track") or DEFAULT_TRACK, "file_id": p.get("music_file_id")}
+
+
+def media_urls(music: Optional[dict], pdf) -> dict:
     pages = (pdf or {}).get("pages") or []
-    return {"music_url": storage.signed_url(music_file_id, "audio"),
+    music = music or {"source": "none"}
+    url, title = None, None
+    if music["source"] == "upload" and music.get("file_id"):
+        url, title = storage.signed_url(music["file_id"], "audio"), "Musik unggahan"
+    elif music["source"] == "system":
+        t = TRACK_IDS.get(music.get("track")) or TRACK_IDS[DEFAULT_TRACK]
+        url, title = f"/music/{t['id']}.mp3", f"{t['title']} · {t['artist']}"
+    return {"music_url": url, "music_title": title,
             "pdf_pages": [{"url": storage.signed_url(pg["file_id"]), "aspect": pg["aspect"]} for pg in pages]}
+
+
+def snapshot_music(snap: dict) -> dict:
+    if "music" in snap:
+        return snap["music"]
+    return {"source": "upload", "file_id": snap["music_file_id"]} if snap.get("music_file_id") else {"source": "none"}
+
+
+@api.get("/music/tracks")
+async def music_tracks(_: dict = Depends(current_member)):
+    return {"default": DEFAULT_TRACK, "tracks": [{**t, "url": f"/music/{t['id']}.mp3"} for t in TRACKS]}
+
+
+@api.put("/projects/{pid}/music-choice")
+async def set_music_choice(pid: str, body: MusicChoiceIn, member: dict = Depends(staff_only)):
+    p = await get_project(pid, member)
+    if body.source not in ("system", "upload", "none") or (body.source == "system" and body.track not in TRACK_IDS):
+        raise HTTPException(400, "Pilihan musik tidak valid")
+    if body.source == "upload" and not p.get("music_file_id"):
+        raise HTTPException(400, "Belum ada musik yang diunggah")
+    data = {"music_source": body.source, "updated_at": now_iso()}
+    if body.source == "system":
+        data["music_track"] = body.track
+    await db.projects.update_one({"id": pid}, {"$set": data})
+    return await get_doc("projects", pid)
 
 
 @api.get("/projects/{pid}/draft")
@@ -415,7 +468,7 @@ async def get_draft(pid: str, member: dict = Depends(staff_only)):
     floors, rooms, scenes = await load_structure(pid)
     fl, sc = with_urls(floors, scenes)
     revisions = await db.revisions.find({"project_id": pid}, {"_id": 0, "snapshot": 0}).sort("number", -1).to_list(500)
-    return {"project": p, "floors": fl, "rooms": rooms, "scenes": sc, **media_urls(p.get("music_file_id"), p.get("pdf")),
+    return {"project": p, "floors": fl, "rooms": rooms, "scenes": sc, **media_urls(project_music(p), p.get("pdf")),
             "tour_order": effective_tour(p.get("tour_order"), floors, rooms, scenes), "revisions": revisions}
 
 
@@ -427,7 +480,7 @@ async def view_project(pid: str, mode: str = "published", member: dict = Depends
             raise HTTPException(404, "Proyek tidak ditemukan")
         floors, rooms, scenes = await load_structure(pid)
         tour, revision = p.get("tour_order"), None
-        media = media_urls(p.get("music_file_id"), p.get("pdf"))
+        media = media_urls(project_music(p), p.get("pdf"))
     else:
         rev = await db.revisions.find_one({"project_id": pid, "number": p.get("published_revision", 0)}, {"_id": 0})
         if not rev:
@@ -435,7 +488,7 @@ async def view_project(pid: str, mode: str = "published", member: dict = Depends
         snap = rev["snapshot"]
         floors, rooms, scenes, tour = snap["floors"], snap["rooms"], snap["scenes"], snap["tour_order"]
         revision = {"number": rev["number"], "published_at": rev["published_at"]}
-        media = media_urls(snap.get("music_file_id"), snap.get("pdf"))
+        media = media_urls(snapshot_music(snap), snap.get("pdf"))
     fl, sc = with_urls(floors, scenes)
     return {"project": {"id": p["id"], "name": p["name"], "code": p.get("code", "")}, "mode": mode, "revision": revision, **media,
             "floors": fl, "rooms": rooms, "scenes": sc, "tour_order": effective_tour(tour, floors, rooms, scenes)}
@@ -465,7 +518,7 @@ async def publish_project(pid: str, member: dict = Depends(staff_only)):
     rev = {"id": new_id(), "project_id": pid, "number": number, "published_at": now_iso(),
            "published_by": member.get("email") or member["user_id"], "scene_count": len(scenes),
            "snapshot": {"floors": floors, "rooms": rooms, "scenes": scenes,
-                        "music_file_id": p.get("music_file_id"), "pdf": p.get("pdf"),
+                        "music": project_music(p), "pdf": p.get("pdf"),
                         "tour_order": effective_tour(p.get("tour_order"), floors, rooms, scenes)}}
     await db.revisions.insert_one({**rev})
     await db.projects.update_one({"id": pid}, {"$set": {"published_revision": number, "published_at": rev["published_at"]}})
@@ -499,14 +552,14 @@ async def upload_music(pid: str, file: UploadFile = File(...), member: dict = De
     ext = (file.filename or "a.mp3").rsplit(".", 1)[-1].lower()[:5]
     doc = await _put_file(pid, "music", f"{storage.APP_NAME}/projects/{pid}/{fid}/audio.{ext}", data, ct, "audio",
                           file_id=fid, original_filename=file.filename)
-    await db.projects.update_one({"id": pid}, {"$set": {"music_file_id": doc["id"], "music_name": file.filename, "updated_at": now_iso()}})
+    await db.projects.update_one({"id": pid}, {"$set": {"music_file_id": doc["id"], "music_name": file.filename, "music_source": "upload", "updated_at": now_iso()}})
     return await get_doc("projects", pid)
 
 
 @api.delete("/projects/{pid}/music")
 async def delete_music(pid: str, member: dict = Depends(staff_only)):
     await get_project(pid, member)
-    await db.projects.update_one({"id": pid}, {"$set": {"music_file_id": None, "music_name": None, "updated_at": now_iso()}})
+    await db.projects.update_one({"id": pid}, {"$set": {"music_file_id": None, "music_name": None, "music_source": "system", "updated_at": now_iso()}})
     return await get_doc("projects", pid)
 
 

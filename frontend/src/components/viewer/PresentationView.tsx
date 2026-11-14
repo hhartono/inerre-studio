@@ -20,7 +20,7 @@ export function PresentationView({ pages }: { pages: PdfPage[] }) {
             <Watermark />
           </div>
           <figcaption className="eyebrow mt-3 text-paper/65">
-            {pad(i + 1)} <span className="text-paper/45">/ {pad(pages.length)}</span>
+            {pad(i + 1)} <span className="text-paper/60">/ {pad(pages.length)}</span>
           </figcaption>
         </figure>
       ))}

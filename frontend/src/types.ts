@@ -69,6 +69,7 @@ export interface ViewData {
   mode: "draft" | "published";
   revision: Revision | null;
   music_url: string | null;
+  music_title?: string | null;
   pdf_pages: PdfPage[];
   floors: Floor[];
   rooms: Room[];
@@ -88,6 +89,9 @@ export interface Project {
   scene_count?: number;
   cover_url?: string | null;
   music_name?: string | null;
+  music_source?: "system" | "upload" | "none";
+  music_track?: string | null;
+  music_file_id?: string | null;
   pdf?: { name: string; pages: { file_id: string; aspect: number }[] } | null;
 }
 

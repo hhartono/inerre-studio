@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, errMsg, img, pad } from "@/lib/api";
-import { buildMaps, tourScenes } from "@/lib/viewer";
+import { api, errMsg, pad } from "@/lib/api";
+import { buildMaps, mediaSrc, tourScenes } from "@/lib/viewer";
 import { useMe } from "@/context/MeContext";
 import type { ViewData } from "@/types";
 import { Splash } from "@/components/RequireRole";
@@ -92,7 +92,7 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
         ))}
       {tab === "denah" && <DenahView data={data} maps={maps} tour={tour} currentId={tour[index]?.id} onOpen={openScene} />}
       {tab === "pdf" && data.pdf_pages?.length > 0 && <PresentationView pages={data.pdf_pages} />}
-      {data.music_url && <audio ref={audioRef} src={img(data.music_url)} loop preload="none" data-testid="tour-music-audio" />}
+      {data.music_url && <audio ref={audioRef} src={mediaSrc(data.music_url)} loop preload="none" data-testid="tour-music-audio" />}
     </div>
   );
 }
