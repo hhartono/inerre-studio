@@ -1,0 +1,98 @@
+{
+  "theme_and_colors": {
+    "mode": "dark",
+    "background": "#171713",
+    "surfaces": "#20201b",
+    "text_primary": "#eee9df",
+    "text_secondary": "rgba(238, 233, 223, 0.6)",
+    "accent": "#c6b38b",
+    "hotspot_nav": "#ffffff",
+    "glassmorphism": "bg-[#171713]/80 backdrop-blur-xl border border-[#eee9df]/10",
+    "forbidden_colors": ["#7351B7", "#1B93A4"]
+  },
+  "typography": {
+    "headings": "'Playfair Display', serif",
+    "eyebrow": "Arial, sans-serif",
+    "body": "'Inter', sans-serif",
+    "rules": [
+      "Eyebrows MUST use Arial, be uppercase, and have wide letter spacing (tracking-[0.2em] or tracking-widest).",
+      "Story titles and presentation headers in the Client Viewer MUST use Playfair Display.",
+      "The Admin/Designer dashboard should use Inter for clarity and density.",
+      "Never use default generic sans for large headings."
+    ]
+  },
+  "layouts_and_grids": {
+    "client_viewer": {
+      "strategy": "Mobile-first, cinematic presentation layout.",
+      "masthead": "Fixed top header with glassmorphism. Contains Brand (INERRE), Project Name, Revision badge, and Navigation Tabs (Ruang / Denah / Layout 3D). z-index: 50.",
+      "ruang_stage": "The main render view. Use an ambient blur background (a scaled-up, heavily blurred version of the render) behind the main image to create a seamless stage. The main render should be max-h-[80vh] and object-contain.",
+      "controls": "Topline scene selector for quick jumps. Absolute positioned Prev/Next arrows on the sides.",
+      "story_panel": "Floating glass panel displaying slide number (e.g., 05/10), title, and description. On Desktop: Bottom-left. On Mobile: Inside a bottom sheet.",
+      "thumbnail_rail": "Bottom horizontal scrolling list of scene thumbnails. Hide scrollbar. Active thumbnail must feature a 7-second autoplay progress bar.",
+      "mini_plan": "Floating panel (Bottom-right) on Desktop showing current position dot. On Mobile, replace this with a 'Denah' floating action button.",
+      "mobile_adaptations": "Hotspot labels must ALWAYS be visible on mobile. Area list must be placed in a bottom sheet."
+    },
+    "designer_editor": {
+      "strategy": "High-density dashboard with strict grid hierarchy.",
+      "sidebar": "Tree view for Project > Floor > Room > Scene.",
+      "main_workspace": "Central area for Render upload, Hotspot Editor, and Floor Plan Camera Editor.",
+      "floor_plan_editor": "Interactive canvas where designers can drop camera pins, drag orientation cones, and adjust cone width.",
+      "hotspot_editor": "Click-to-place absolute dots on the render. Modal/Popover to select target scene, assign labels, and create bidirectional return links."
+    }
+  },
+  "components": {
+    "hotspots": "Absolute positioned circular indicators. Normal hotspots navigate to scenes. ALT hotspots (Alternative A/B) MUST use the accent color (#c6b38b). Pulse animations applied.",
+    "camera_pin": "SVG icon representing camera position, with an attached semi-transparent cone polygon representing the view angle.",
+    "tabs": "Use Shadcn tabs, customized with the #c6b38b accent color for the active indicator.",
+    "bottom_sheet": "Framer motion powered slide-up panel for mobile views.",
+    "watermark": "INERRE logo placed over the render with low opacity (e.g., opacity-30) prior to approval."
+  },
+  "motion_and_interactions": {
+    "transitions": "Use framer-motion for smooth crossfades between scenes and Ruang/Denah tab switches.",
+    "autoplay": "7-second linear fill animation on the active thumbnail's progress bar. Pauses on hover/interaction.",
+    "drag_and_drop": "Implement drag-and-drop for sorting the tour order and moving camera pins in the editor.",
+    "keyboard_nav": "Arrow Left/Right for prev/next scene. Escape for exiting fullscreen."
+  },
+  "accessibility": {
+    "contrast": "Ensure text overlaying renders has sufficient contrast (use text-shadow or a subtle dark gradient overlay behind text panels).",
+    "testing": "All interactive elements (buttons, hotspots, tabs, editor inputs) MUST include a 'data-testid' attribute (e.g., data-testid='hotspot-alt-a')."
+  },
+  "visual_enhancers": {
+    "borders": "Use delicate 1px borders with 10% opacity (border-[#eee9df]/10) to separate panels without visual clutter.",
+    "ambient_lighting": "Crucial for 'Ruang' stage: replicate the render's edge colors in a blurred background layer to make the render feel immersive."
+  },
+  "image_urls": {
+    "living_room_render": {
+      "url": "https://images.unsplash.com/photo-1724582586529-62622e50c0b3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2Mzl8MHwxfHNlYXJjaHwyfHxsdXh1cnklMjBtb2Rlcm4lMjBpbnRlcmlvciUyMGxpdmluZyUyMHJvb20lMjByZW5kZXJ8ZW58MHx8fHwxNzk0NjYwMzg1fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Example 3D interior render for the Ruang stage and hotspot editor."
+    },
+    "floor_plan": {
+      "url": "https://images.unsplash.com/photo-1721244654394-36a7bc2da288?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHw0fHxhcmNoaXRlY3R1cmFsJTIwZmxvb3IlMjBwbGFuJTIwYmx1ZXByaW50fGVufDB8fHx8MTc5NDY2MDM4NXww&ixlib=rb-4.1.0&q=85",
+      "description": "Architectural blueprint for the Denah viewer and camera pin editor."
+    },
+    "layout_3d": {
+      "url": "https://images.unsplash.com/photo-1724679108272-3b050899d73e?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NTY2OTV8MHwxfHNlYXJjaHw0fHxpc29tZXRyaWMlMjAzZCUyMGludGVyaW9yJTIwYXBhcnRtZW50JTIwbGF5b3V0fGVufDB8fHx8MTc5NDY2MDM4NXww&ixlib=rb-4.1.0&q=85",
+      "description": "Isometric view for the 3D Layout tab."
+    }
+  },
+  "instructions_to_main_agent": [
+    "Use ONLY .js and .jsx extensions. Do not use TypeScript (.tsx).",
+    "Build a Hybrid application containing both the Designer Editor routes and the Client Viewer routes.",
+    "Implement the specified color variables precisely: dark background (#171713), surfaces (#20201b), text (#eee9df), and accent (#c6b38b).",
+    "Apply 'data-testid' to ALL interactive components for regression testing.",
+    "Use Framer Motion for the 7s autoplay bar and scene transitions.",
+    "Implement the 'ambient blur' effect on the Ruang stage by placing a heavily blurred (blur-3xl), scaled-up copy of the image absolute-positioned behind the actual render."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic, 'on distribution' outputs. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Create depth through layered design elements with z-index hierarchy.",
+    "Use glass-morphism effects with backdrop filters (12-24px blur).",
+    "You MUST NOT apply universal transition (transition: all). Always add transitions for specific interactive elements.",
+    "You MUST NOT center align the app container. This disrupts the human natural reading flow.",
+    "Every interaction needs micro-animations - hover states, transitions, entrance animations. Static = dead.",
+    "Use 2-3x more spacing than feels comfortable. Cramped designs look cheap.",
+    "NEVER use purely transparent backgrounds over content (e.g., sticky headers or dropdowns must have glassmorphism or solid backgrounds).",
+    "Main agent relies on these image URLs. Missing categories = main agent will use placeholder text which is FORBIDDEN.",
+    "Prioritize using pre-existing components from src/components/ui when applicable. Use Sonner for toast notifications."
+  ]
+}

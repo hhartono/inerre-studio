@@ -123,6 +123,11 @@ let webpackConfig = {
         ],
       };
 
+      // TS is transpiled by Babel; skip the blocking type-check plugin.
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        (p) => p.constructor && p.constructor.name !== "ForkTsCheckerWebpackPlugin",
+      );
+
       // Add health check plugin to webpack if enabled
       if (config.enableHealthCheck && healthPluginInstance) {
         webpackConfig.plugins.push(healthPluginInstance);

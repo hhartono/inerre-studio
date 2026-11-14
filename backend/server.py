@@ -1,116 +1,650 @@
-import asyncio
-from contextlib import suppress
-from fastapi import FastAPI, APIRouter, Query
-from dotenv import load_dotenv
-from starlette.middleware.cors import CORSMiddleware
-from motor.motor_asyncio import AsyncIOMotorClient
-from pymongo import ASCENDING, DESCENDING, IndexModel
-import os
 import logging
-from pathlib import Path
-from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+import os
 import uuid
 from datetime import datetime, timezone
+from pathlib import Path
+from typing import List, Optional
 
+import requests
+from dotenv import load_dotenv
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+load_dotenv(ROOT_DIR / ".env")
 
-# MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Response, UploadFile  # noqa: E402
+from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
+from pydantic import BaseModel, Field  # noqa: E402
+from pymongo import ReturnDocument  # noqa: E402
+from starlette.concurrency import run_in_threadpool  # noqa: E402
+from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 
-# One entry per collection: every field a route filters, sorts or dedupes on. Add the index in the same edit as the query.
-INDEXES: dict[str, list[IndexModel]] = {
-    "status_checks": [
-        IndexModel([("id", ASCENDING)], name="id", unique=True),
-        IndexModel([("timestamp", DESCENDING)], name="timestamp_desc"),
-    ],
-}
+try:  # launched as `backend.server`
+    from backend.clerk_auth import clerk_router, require_user
+    from backend import storage
+except ModuleNotFoundError:  # launched from inside backend/
+    from clerk_auth import clerk_router, require_user
+    import storage
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("inerre")
 
-async def ensure_indexes() -> None:
-    for collection, models in INDEXES.items():
-        for model in models:  # one at a time so a bad spec skips only itself
-            try:
-                await db[collection].create_indexes([model])
-            except Exception as exc:  # never block boot on an index; the log line names what to fix
-                logging.getLogger(__name__).error("ensure_indexes(%s.%s): %s", collection, model.document["name"], exc)
+client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+db = client[os.environ["DB_NAME"]]
 
-# Create the main app without a prefix
 app = FastAPI()
+api = APIRouter(prefix="/api")
 
-# Create a router with the /api prefix
-api_router = APIRouter(prefix="/api")
+# ---------- roles ----------
+ROLES = ["admin", "designer", "client", "pending"]
+DEFAULT_ROLE = "pending"
+RETIRED_ROLES: dict = {}
+RANK = {r: len(ROLES) - i for i, r in enumerate(ROLES)}
+STAFF = ("admin", "designer")
+ENV = "live" if os.environ.get("CLERK_PUBLISHABLE_KEY", "").startswith("pk_live_") else "preview"
+IN_ENV = {"env": {"$in": [ENV, None]}}
 
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
-    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
 
-# Add your routes to the router instead of directly to app
-@api_router.get("/")
+def new_id() -> str:
+    return uuid.uuid4().hex
+
+
+def effective_role(role) -> str:
+    role = RETIRED_ROLES.get(role, role)
+    return role if role in ROLES else DEFAULT_ROLE
+
+
+def _clerk_profile(user_id: str):
+    r = requests.get(
+        f"https://api.clerk.com/v1/users/{user_id}", timeout=10,
+        headers={"Authorization": f"Bearer {os.environ['CLERK_SECRET_KEY']}", "User-Agent": "emergent-app"},
+    )
+    r.raise_for_status()
+    j = r.json()
+    emails = [e["email_address"].lower() for e in j.get("email_addresses", [])
+              if (e.get("verification") or {}).get("status") == "verified"]
+    name = " ".join(x for x in [j.get("first_name"), j.get("last_name")] if x)
+    return emails, name
+
+
+async def _initial_role(emails: List[str]) -> str:
+    admins = {e.strip().lower() for e in os.environ.get("ADMIN_EMAIL", "").split(",") if e.strip()}
+    if any(e in admins for e in emails):
+        return "admin"
+    inv = await db.invites.find_one({"email": {"$in": emails}}, {"_id": 0})
+    return effective_role(inv["role"]) if inv else DEFAULT_ROLE
+
+
+async def current_member(user: dict = Depends(require_user)) -> dict:
+    uid = user["user_id"]
+    member = await db.users.find_one({"user_id": uid}, {"_id": 0})
+    if member is None or not member.get("role"):
+        emails, name = await run_in_threadpool(_clerk_profile, uid)
+        role = await _initial_role(emails)
+        profile = {"emails": emails, "email": emails[0] if emails else "", "name": name}
+        await db.users.update_one({"user_id": uid, "role": {"$in": [None, ""]}}, {"$set": {"role": role, **profile}})
+        member = await db.users.find_one_and_update(
+            {"user_id": uid},
+            {"$setOnInsert": {"user_id": uid, "role": role, "created_at": now_iso(), **profile}},
+            upsert=True, projection={"_id": 0}, return_document=ReturnDocument.AFTER,
+        )
+    elif effective_role(member.get("role")) == DEFAULT_ROLE and member.get("emails"):
+        inv = await db.invites.find_one({"email": {"$in": member["emails"]}}, {"_id": 0})
+        if inv:
+            await db.users.update_one({"user_id": uid}, {"$set": {"role": inv["role"]}})
+            member["role"] = inv["role"]
+    if member.get("env") != ENV:
+        await db.users.update_one({"user_id": uid}, {"$set": {"env": ENV}})
+    return {**member, "env": ENV, "role": effective_role(member["role"])}
+
+
+def require_role(*roles: str):
+    async def check(member: dict = Depends(current_member)) -> dict:
+        if member["role"] not in roles:
+            raise HTTPException(status_code=403, detail="Not allowed")
+        return member
+    return check
+
+
+staff_only = require_role(*STAFF)
+admin_only = require_role("admin")
+
+
+@app.on_event("startup")
+async def startup():
+    for old, new in RETIRED_ROLES.items():
+        await db.users.update_many({"role": old}, {"$set": {"role": new}})
+    for coll, field in (("projects", "id"), ("floors", "id"), ("rooms", "id"), ("scenes", "id"), ("files", "id")):
+        await db[coll].create_index(field, unique=True)
+    await db.scenes.create_index("project_id")
+    await db.users.create_index("user_id", unique=True)
+    try:
+        await run_in_threadpool(storage.init_storage)
+        logger.info("Storage initialized")
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Storage init failed: {e}")
+
+
+# ---------- models ----------
+class RoleIn(BaseModel):
+    role: str
+
+
+class InviteIn(BaseModel):
+    email: str
+    role: str
+
+
+class ProjectIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    code: str = ""
+
+
+class ProjectUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    client_emails: Optional[List[str]] = None
+
+
+class NameIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+
+
+class FloorUpdate(BaseModel):
+    name: Optional[str] = None
+    layout3d_caption: Optional[str] = None
+
+
+class HotspotIn(BaseModel):
+    id: str
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    target_scene_id: Optional[str] = None
+    label: str = ""
+
+
+class CameraIn(BaseModel):
+    x: float = Field(ge=0, le=1)
+    y: float = Field(ge=0, le=1)
+    angle: float = Field(0, ge=-360, le=360)
+    fov: float = Field(60, ge=10, le=170)
+
+
+class SceneUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    area: Optional[str] = None
+    room_id: Optional[str] = None
+    hotspots: Optional[List[HotspotIn]] = None
+    camera: Optional[CameraIn] = None
+    clear_camera: bool = False
+
+
+class TourIn(BaseModel):
+    order: List[str]
+
+
+class BacklinkIn(BaseModel):
+    hotspot_id: str
+
+
+# ---------- helpers ----------
+async def get_project(pid: str, member: dict, staff: bool = False) -> dict:
+    p = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Proyek tidak ditemukan")
+    if member["role"] in STAFF:
+        return p
+    shared = set(p.get("client_emails", [])) & set(member.get("emails", []))
+    if staff or member["role"] != "client" or not shared or not p.get("published_revision"):
+        raise HTTPException(404, "Proyek tidak ditemukan")
+    return p
+
+
+async def get_doc(coll: str, doc_id: str) -> dict:
+    d = await db[coll].find_one({"id": doc_id}, {"_id": 0})
+    if not d:
+        raise HTTPException(404, "Tidak ditemukan")
+    return d
+
+
+async def load_structure(pid: str):
+    floors = await db.floors.find({"project_id": pid}, {"_id": 0}).sort("order", 1).to_list(200)
+    rooms = await db.rooms.find({"project_id": pid}, {"_id": 0}).sort("order", 1).to_list(1000)
+    scenes = await db.scenes.find({"project_id": pid}, {"_id": 0}).sort("order", 1).to_list(5000)
+    return floors, rooms, scenes
+
+
+def effective_tour(tour_order, floors, rooms, scenes) -> List[str]:
+    ids = {s["id"] for s in scenes}
+    order = [sid for sid in (tour_order or []) if sid in ids]
+    floor_rank = {f["id"]: i for i, f in enumerate(floors)}
+    room_rank = {r["id"]: i for i, r in enumerate(rooms)}
+    rest = sorted((s for s in scenes if s["id"] not in order),
+                  key=lambda s: (floor_rank.get(s["floor_id"], 999), room_rank.get(s["room_id"], 999), s.get("order", 0)))
+    return order + [s["id"] for s in rest]
+
+
+def with_urls(floors, scenes):
+    fl = [{**f, "plan_url": storage.signed_url(f.get("plan_file_id")),
+           "layout3d_url": storage.signed_url(f.get("layout3d_file_id"))} for f in floors]
+    sc = [{**s, "image_url": storage.signed_url(s.get("image_file_id")),
+           "thumb_url": storage.signed_url(s.get("image_file_id"), "thumb")} for s in scenes]
+    return fl, sc
+
+
+def validate_structure(floors, rooms, scenes) -> dict:
+    errors, warnings = [], []
+    ids = {s["id"]: s for s in scenes}
+    if not scenes:
+        errors.append({"code": "no_scenes", "message": "Belum ada scene di proyek ini."})
+    for s in scenes:
+        name = s.get("title") or "Tanpa judul"
+        for h in s.get("hotspots", []):
+            if not h.get("target_scene_id") or h["target_scene_id"] not in ids:
+                errors.append({"code": "broken_link", "scene_id": s["id"],
+                               "message": f"Hotspot \"{h.get('label') or '—'}\" di scene \"{name}\" mengarah ke scene yang tidak ada."})
+        if s.get("hotspots_need_check"):
+            errors.append({"code": "needs_check", "scene_id": s["id"],
+                           "message": f"Render scene \"{name}\" berganti rasio. Hotspot perlu dicek dan dikonfirmasi."})
+        if not s.get("title"):
+            warnings.append({"code": "no_title", "scene_id": s["id"], "message": "Ada scene tanpa judul."})
+        if not s.get("camera"):
+            warnings.append({"code": "no_camera", "scene_id": s["id"], "message": f"Scene \"{name}\" belum punya pin kamera di denah."})
+    for f in floors:
+        if not f.get("plan_file_id"):
+            warnings.append({"code": "no_plan", "floor_id": f["id"], "message": f"Lantai \"{f['name']}\" belum punya denah."})
+    return {"ok": not errors, "errors": errors, "warnings": warnings}
+
+
+async def save_upload(file: UploadFile, project_id: str, kind: str) -> dict:
+    data = await file.read()
+    if not data:
+        raise HTTPException(400, "File kosong")
+    if len(data) > 80 * 1024 * 1024:
+        raise HTTPException(413, "File terlalu besar (maks 80 MB)")
+    ct = file.content_type or ""
+    if not ct.startswith("image/"):
+        raise HTTPException(400, "File harus berupa gambar")
+    try:
+        proc = await run_in_threadpool(storage.process_image, data)
+    except Exception:  # noqa: BLE001
+        raise HTTPException(400, "Gambar tidak bisa dibaca")
+    fid = new_id()
+    ext = (file.filename or "img").rsplit(".", 1)[-1].lower()[:5] or "bin"
+    base = f"{storage.APP_NAME}/projects/{project_id}/{fid}"
+    paths = {}
+    for variant, payload, mime in (("original", data, ct), ("web", proc["web"], "image/webp"), ("thumb", proc["thumb"], "image/webp")):
+        res = await run_in_threadpool(storage.put_object, f"{base}/{variant}.{ext if variant == 'original' else 'webp'}", payload, mime)
+        paths[variant] = res["path"]
+    doc = {"id": fid, "project_id": project_id, "kind": kind, "original_filename": file.filename, "content_type": ct,
+           "paths": paths, "width": proc["width"], "height": proc["height"], "aspect": proc["aspect"],
+           "is_deleted": False, "created_at": now_iso()}
+    await db.files.insert_one({**doc})
+    return doc
+
+
+async def touch(pid: str):
+    await db.projects.update_one({"id": pid}, {"$set": {"updated_at": now_iso()}})
+
+
+# ---------- me / users ----------
+@api.get("/me")
+async def me(member: dict = Depends(current_member)):
+    return {k: member.get(k) for k in ("user_id", "email", "emails", "name", "role")}
+
+
+@api.get("/users")
+async def list_users(admin: dict = Depends(admin_only)):
+    people = await db.users.find(IN_ENV, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return {"roles": [r for r in ROLES if RANK[r] <= RANK[admin["role"]]],
+            "users": [{**p, "role": effective_role(p.get("role"))} for p in people]}
+
+
+@api.patch("/users/{user_id}/role")
+async def set_role(user_id: str, body: RoleIn, admin: dict = Depends(admin_only)):
+    if body.role not in ROLES or RANK[body.role] > RANK[admin["role"]]:
+        raise HTTPException(403, "Not allowed")
+    target = await db.users.find_one({"user_id": user_id, **IN_ENV}, {"_id": 0})
+    if target is None:
+        raise HTTPException(404, "Not found")
+    if (effective_role(target.get("role")) == "admin" and body.role != "admin"
+            and await db.users.count_documents({"role": "admin", **IN_ENV}) <= 1):
+        raise HTTPException(409, "Minimal harus ada satu admin")
+    await db.users.update_one({"user_id": user_id}, {"$set": {"role": body.role}})
+    return {"user_id": user_id, "role": body.role}
+
+
+@api.get("/invites")
+async def list_invites(_: dict = Depends(admin_only)):
+    return await db.invites.find({}, {"_id": 0}).sort("created_at", -1).to_list(1000)
+
+
+@api.post("/invites")
+async def create_invite(body: InviteIn, admin: dict = Depends(admin_only)):
+    email = body.email.strip().lower()
+    if "@" not in email or body.role not in ROLES or body.role == DEFAULT_ROLE or RANK[body.role] > RANK[admin["role"]]:
+        raise HTTPException(400, "Email atau peran tidak valid")
+    doc = {"email": email, "role": body.role, "created_at": now_iso()}
+    await db.invites.update_one({"email": email}, {"$set": doc}, upsert=True)
+    await db.users.update_many({"emails": email, "role": DEFAULT_ROLE, **IN_ENV}, {"$set": {"role": body.role}})
+    return doc
+
+
+@api.delete("/invites/{email}")
+async def delete_invite(email: str, _: dict = Depends(admin_only)):
+    await db.invites.delete_one({"email": email.lower()})
+    return {"ok": True}
+
+
+# ---------- projects ----------
+async def project_summary(p: dict) -> dict:
+    count = await db.scenes.count_documents({"project_id": p["id"]})
+    first = await db.scenes.find_one({"project_id": p["id"]}, {"_id": 0, "image_file_id": 1}, sort=[("created_at", 1)])
+    cover = p.get("cover_file_id") or (first or {}).get("image_file_id")
+    return {**p, "scene_count": count, "cover_url": storage.signed_url(cover, "thumb")}
+
+
+@api.get("/projects")
+async def list_projects(member: dict = Depends(current_member)):
+    if member["role"] in STAFF:
+        q = {}
+    elif member["role"] == "client":
+        q = {"client_emails": {"$in": member.get("emails", [])}, "published_revision": {"$gt": 0}}
+    else:
+        return []
+    items = await db.projects.find(q, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    if member["role"] == "client":
+        for p in items:
+            rev = await db.revisions.find_one({"project_id": p["id"], "number": p["published_revision"]}, {"_id": 0, "snapshot.scenes": 1})
+            scenes = ((rev or {}).get("snapshot") or {}).get("scenes") or []
+            p["cover_file_id"] = scenes[0]["image_file_id"] if scenes else None
+    return [await project_summary(p) for p in items]
+
+
+@api.post("/projects")
+async def create_project(body: ProjectIn, member: dict = Depends(staff_only)):
+    doc = {"id": new_id(), "name": body.name.strip(), "code": body.code.strip(), "client_emails": [], "tour_order": [],
+           "published_revision": 0, "created_by": member["user_id"], "created_at": now_iso(), "updated_at": now_iso()}
+    await db.projects.insert_one({**doc})
+    return doc
+
+
+@api.patch("/projects/{pid}")
+async def update_project(pid: str, body: ProjectUpdate, member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    data = body.model_dump(exclude_unset=True)
+    if "client_emails" in data:
+        if member["role"] != "admin":
+            raise HTTPException(403, "Hanya admin yang bisa mengatur klien")
+        data["client_emails"] = sorted({e.strip().lower() for e in data["client_emails"] if "@" in e})
+    data["updated_at"] = now_iso()
+    await db.projects.update_one({"id": pid}, {"$set": data})
+    return await get_doc("projects", pid)
+
+
+@api.delete("/projects/{pid}")
+async def delete_project(pid: str, _: dict = Depends(admin_only)):
+    for coll in ("floors", "rooms", "scenes", "revisions"):
+        await db[coll].delete_many({"project_id": pid})
+    await db.files.update_many({"project_id": pid}, {"$set": {"is_deleted": True}})
+    await db.projects.delete_one({"id": pid})
+    return {"ok": True}
+
+
+@api.get("/projects/{pid}/draft")
+async def get_draft(pid: str, member: dict = Depends(staff_only)):
+    p = await get_project(pid, member)
+    floors, rooms, scenes = await load_structure(pid)
+    fl, sc = with_urls(floors, scenes)
+    revisions = await db.revisions.find({"project_id": pid}, {"_id": 0, "snapshot": 0}).sort("number", -1).to_list(500)
+    return {"project": p, "floors": fl, "rooms": rooms, "scenes": sc,
+            "tour_order": effective_tour(p.get("tour_order"), floors, rooms, scenes), "revisions": revisions}
+
+
+@api.get("/projects/{pid}/view")
+async def view_project(pid: str, mode: str = "published", member: dict = Depends(current_member)):
+    p = await get_project(pid, member)
+    if mode == "draft":
+        if member["role"] not in STAFF:
+            raise HTTPException(404, "Proyek tidak ditemukan")
+        floors, rooms, scenes = await load_structure(pid)
+        tour, revision = p.get("tour_order"), None
+    else:
+        rev = await db.revisions.find_one({"project_id": pid, "number": p.get("published_revision", 0)}, {"_id": 0})
+        if not rev:
+            raise HTTPException(404, "Proyek belum dipublikasikan")
+        snap = rev["snapshot"]
+        floors, rooms, scenes, tour = snap["floors"], snap["rooms"], snap["scenes"], snap["tour_order"]
+        revision = {"number": rev["number"], "published_at": rev["published_at"]}
+    fl, sc = with_urls(floors, scenes)
+    return {"project": {"id": p["id"], "name": p["name"], "code": p.get("code", "")}, "mode": mode, "revision": revision,
+            "floors": fl, "rooms": rooms, "scenes": sc, "tour_order": effective_tour(tour, floors, rooms, scenes)}
+
+
+@api.put("/projects/{pid}/tour")
+async def set_tour(pid: str, body: TourIn, member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    await db.projects.update_one({"id": pid}, {"$set": {"tour_order": body.order, "updated_at": now_iso()}})
+    return {"ok": True}
+
+
+@api.get("/projects/{pid}/validate")
+async def validate_project(pid: str, member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    return validate_structure(*(await load_structure(pid)))
+
+
+@api.post("/projects/{pid}/publish")
+async def publish_project(pid: str, member: dict = Depends(staff_only)):
+    p = await get_project(pid, member)
+    floors, rooms, scenes = await load_structure(pid)
+    result = validate_structure(floors, rooms, scenes)
+    if not result["ok"]:
+        raise HTTPException(400, {"message": "Publikasi diblokir", **result})
+    number = (p.get("published_revision") or 0) + 1
+    rev = {"id": new_id(), "project_id": pid, "number": number, "published_at": now_iso(),
+           "published_by": member.get("email") or member["user_id"], "scene_count": len(scenes),
+           "snapshot": {"floors": floors, "rooms": rooms, "scenes": scenes,
+                        "tour_order": effective_tour(p.get("tour_order"), floors, rooms, scenes)}}
+    await db.revisions.insert_one({**rev})
+    await db.projects.update_one({"id": pid}, {"$set": {"published_revision": number, "published_at": rev["published_at"]}})
+    return {"number": number, "published_at": rev["published_at"]}
+
+
+# ---------- floors ----------
+@api.post("/projects/{pid}/floors")
+async def create_floor(pid: str, body: NameIn, member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    order = await db.floors.count_documents({"project_id": pid})
+    doc = {"id": new_id(), "project_id": pid, "name": body.name.strip(), "order": order, "plan_file_id": None,
+           "plan_aspect": None, "layout3d_file_id": None, "layout3d_caption": "", "created_at": now_iso()}
+    await db.floors.insert_one({**doc})
+    await touch(pid)
+    return doc
+
+
+@api.patch("/floors/{fid}")
+async def update_floor(fid: str, body: FloorUpdate, member: dict = Depends(staff_only)):
+    f = await get_doc("floors", fid)
+    await get_project(f["project_id"], member)
+    await db.floors.update_one({"id": fid}, {"$set": body.model_dump(exclude_unset=True)})
+    await touch(f["project_id"])
+    return await get_doc("floors", fid)
+
+
+@api.delete("/floors/{fid}")
+async def delete_floor(fid: str, member: dict = Depends(staff_only)):
+    f = await get_doc("floors", fid)
+    await get_project(f["project_id"], member)
+    sids = [s["id"] for s in await db.scenes.find({"floor_id": fid}, {"id": 1}).to_list(5000)]
+    await db.scenes.delete_many({"floor_id": fid})
+    await db.rooms.delete_many({"floor_id": fid})
+    await db.floors.delete_one({"id": fid})
+    await db.projects.update_one({"id": f["project_id"]}, {"$pull": {"tour_order": {"$in": sids}}, "$set": {"updated_at": now_iso()}})
+    return {"ok": True}
+
+
+@api.post("/floors/{fid}/image/{kind}")
+async def upload_floor_image(fid: str, kind: str, file: UploadFile = File(...), member: dict = Depends(staff_only)):
+    if kind not in ("plan", "layout3d"):
+        raise HTTPException(404, "Not found")
+    f = await get_doc("floors", fid)
+    await get_project(f["project_id"], member)
+    doc = await save_upload(file, f["project_id"], kind)
+    update = {f"{kind}_file_id": doc["id"]}
+    if kind == "plan":
+        update["plan_aspect"] = doc["aspect"]
+    await db.floors.update_one({"id": fid}, {"$set": update})
+    await touch(f["project_id"])
+    return await get_doc("floors", fid)
+
+
+# ---------- rooms ----------
+@api.post("/floors/{fid}/rooms")
+async def create_room(fid: str, body: NameIn, member: dict = Depends(staff_only)):
+    f = await get_doc("floors", fid)
+    await get_project(f["project_id"], member)
+    order = await db.rooms.count_documents({"project_id": f["project_id"]})
+    doc = {"id": new_id(), "project_id": f["project_id"], "floor_id": fid, "name": body.name.strip(), "order": order, "created_at": now_iso()}
+    await db.rooms.insert_one({**doc})
+    await touch(f["project_id"])
+    return doc
+
+
+@api.patch("/rooms/{rid}")
+async def update_room(rid: str, body: NameIn, member: dict = Depends(staff_only)):
+    r = await get_doc("rooms", rid)
+    await get_project(r["project_id"], member)
+    await db.rooms.update_one({"id": rid}, {"$set": {"name": body.name.strip()}})
+    return await get_doc("rooms", rid)
+
+
+@api.delete("/rooms/{rid}")
+async def delete_room(rid: str, member: dict = Depends(staff_only)):
+    r = await get_doc("rooms", rid)
+    await get_project(r["project_id"], member)
+    sids = [s["id"] for s in await db.scenes.find({"room_id": rid}, {"id": 1}).to_list(5000)]
+    await db.scenes.delete_many({"room_id": rid})
+    await db.rooms.delete_one({"id": rid})
+    await db.projects.update_one({"id": r["project_id"]}, {"$pull": {"tour_order": {"$in": sids}}, "$set": {"updated_at": now_iso()}})
+    return {"ok": True}
+
+
+# ---------- scenes ----------
+@api.post("/rooms/{rid}/scenes")
+async def create_scene(rid: str, file: UploadFile = File(...), member: dict = Depends(staff_only)):
+    r = await get_doc("rooms", rid)
+    await get_project(r["project_id"], member)
+    up = await save_upload(file, r["project_id"], "render")
+    order = await db.scenes.count_documents({"room_id": rid})
+    title = Path(file.filename or "").stem.replace("_", " ").replace("-", " ").strip()[:80]
+    doc = {"id": new_id(), "project_id": r["project_id"], "floor_id": r["floor_id"], "room_id": rid, "title": title,
+           "description": "", "area": r["name"], "image_file_id": up["id"], "aspect": up["aspect"], "order": order,
+           "hotspots": [], "camera": None, "hotspots_need_check": False, "created_at": now_iso()}
+    await db.scenes.insert_one({**doc})
+    await db.projects.update_one({"id": r["project_id"]}, {"$push": {"tour_order": doc["id"]}, "$set": {"updated_at": now_iso()}})
+    return with_urls([], [doc])[1][0]
+
+
+@api.patch("/scenes/{sid}")
+async def update_scene(sid: str, body: SceneUpdate, member: dict = Depends(staff_only)):
+    s = await get_doc("scenes", sid)
+    await get_project(s["project_id"], member)
+    data = body.model_dump(exclude_unset=True, exclude={"clear_camera"})
+    if body.clear_camera:
+        data["camera"] = None
+    if "room_id" in data:
+        room = await get_doc("rooms", data["room_id"])
+        if room["project_id"] != s["project_id"]:
+            raise HTTPException(400, "Ruangan tidak valid")
+        data["floor_id"] = room["floor_id"]
+    await db.scenes.update_one({"id": sid}, {"$set": data})
+    await touch(s["project_id"])
+    return with_urls([], [await get_doc("scenes", sid)])[1][0]
+
+
+@api.post("/scenes/{sid}/image")
+async def replace_scene_image(sid: str, file: UploadFile = File(...), member: dict = Depends(staff_only)):
+    s = await get_doc("scenes", sid)
+    await get_project(s["project_id"], member)
+    up = await save_upload(file, s["project_id"], "render")
+    changed = abs(up["aspect"] - (s.get("aspect") or up["aspect"])) / (s.get("aspect") or 1) > 0.01
+    data = {"image_file_id": up["id"], "aspect": up["aspect"]}
+    if changed and s.get("hotspots"):
+        data["hotspots_need_check"] = True
+    await db.scenes.update_one({"id": sid}, {"$set": data})
+    await touch(s["project_id"])
+    return with_urls([], [await get_doc("scenes", sid)])[1][0]
+
+
+@api.post("/scenes/{sid}/confirm-hotspots")
+async def confirm_hotspots(sid: str, member: dict = Depends(staff_only)):
+    s = await get_doc("scenes", sid)
+    await get_project(s["project_id"], member)
+    await db.scenes.update_one({"id": sid}, {"$set": {"hotspots_need_check": False}})
+    return with_urls([], [await get_doc("scenes", sid)])[1][0]
+
+
+@api.post("/scenes/{sid}/backlink")
+async def create_backlink(sid: str, body: BacklinkIn, member: dict = Depends(staff_only)):
+    s = await get_doc("scenes", sid)
+    await get_project(s["project_id"], member)
+    hs = next((h for h in s.get("hotspots", []) if h["id"] == body.hotspot_id), None)
+    if not hs or not hs.get("target_scene_id"):
+        raise HTTPException(400, "Hotspot belum punya tujuan")
+    target = await db.scenes.find_one({"id": hs["target_scene_id"], "project_id": s["project_id"]}, {"_id": 0})
+    if not target:
+        raise HTTPException(400, "Scene tujuan tidak ada")
+    if any(h.get("target_scene_id") == sid for h in target.get("hotspots", [])):
+        return {"created": False, "target_scene_id": target["id"]}
+    room = await db.rooms.find_one({"id": s["room_id"]}, {"_id": 0, "name": 1})
+    label = s.get("title") or (room or {}).get("name") or "Kembali"
+    back = {"id": new_id(), "x": round(1 - hs["x"], 4), "y": hs["y"], "target_scene_id": sid, "label": label}
+    await db.scenes.update_one({"id": target["id"]}, {"$push": {"hotspots": back}})
+    return {"created": True, "target_scene_id": target["id"], "hotspot": back}
+
+
+@api.delete("/scenes/{sid}")
+async def delete_scene(sid: str, member: dict = Depends(staff_only)):
+    s = await get_doc("scenes", sid)
+    await get_project(s["project_id"], member)
+    await db.scenes.delete_one({"id": sid})
+    await db.projects.update_one({"id": s["project_id"]}, {"$pull": {"tour_order": sid}, "$set": {"updated_at": now_iso()}})
+    return {"ok": True}
+
+
+# ---------- images (signed) ----------
+@api.get("/img/{fid}/{variant}")
+async def serve_image(fid: str, variant: str, e: int = Query(...), s: str = Query(...)):
+    if variant not in ("web", "thumb") or not storage.verify(fid, variant, e, s):
+        raise HTTPException(403, "Link gambar tidak valid atau kedaluwarsa")
+    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0, "paths": 1})
+    if not rec:
+        raise HTTPException(404, "Gambar tidak ditemukan")
+    data = await run_in_threadpool(storage.get_object, rec["paths"][variant])
+    return Response(content=data, media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@api.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"status": "ok"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks(limit: int = Query(20, ge=1, le=100)):
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
-
-# Include the router in the main app
-app.include_router(api_router)
-
+app.include_router(api)
+app.include_router(clerk_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=os.environ.get("CORS_ORIGINS", "*").split(","),
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-logger = logging.getLogger(__name__)
-
-@app.on_event("startup")
-async def start_index_build():
-    app.state.index_task = asyncio.create_task(ensure_indexes())  # background: a big index build must not block boot
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    app.state.index_task.cancel()  # stop a build still running before its client closes
-    with suppress(asyncio.CancelledError):
-        await app.state.index_task
     client.close()
