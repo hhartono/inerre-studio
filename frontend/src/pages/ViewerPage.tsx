@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { api, errMsg, pad } from "@/lib/api";
+import { api, errMsg, img, pad } from "@/lib/api";
 import { buildMaps, tourScenes } from "@/lib/viewer";
 import { useMe } from "@/context/MeContext";
 import type { ViewData } from "@/types";
@@ -22,6 +22,18 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
   const [error, setError] = useState("");
   const [tab, setTab] = useState<ViewerTab>("ruang");
   const [index, setIndexRaw] = useState(0);
+  const [musicOn, setMusicOn] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
+
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) {
+      return;
+    }
+    a.volume = 0.6;
+    if (musicOn) a.play().catch(() => setMusicOn(false));
+    else a.pause();
+  }, [musicOn]);
 
   useEffect(() => {
     api
@@ -70,16 +82,17 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
   };
 
   return (
-    <div className="min-h-screen bg-ink text-paper" data-testid="viewer-page">
+    <div className={`bg-ink text-paper ${tab === "denah" ? "flex h-[100dvh] flex-col overflow-hidden" : "min-h-screen"}`} data-testid="viewer-page">
       <Masthead data={data} tab={tab} setTab={setTab} backTo={backTo} />
       {tab === "ruang" &&
         (tour.length ? (
-          <RuangStage data={data} maps={maps} tour={tour} index={Math.min(index, tour.length - 1)} setIndex={setIndex} />
+          <RuangStage data={data} maps={maps} tour={tour} index={Math.min(index, tour.length - 1)} setIndex={setIndex} musicOn={musicOn} setMusicOn={setMusicOn} />
         ) : (
           <p className="eyebrow px-5 py-16 text-paper/45 md:px-10" data-testid="viewer-empty">Belum ada scene</p>
         ))}
       {tab === "denah" && <DenahView data={data} maps={maps} tour={tour} currentId={tour[index]?.id} onOpen={openScene} />}
       {tab === "pdf" && data.pdf_pages?.length > 0 && <PresentationView pages={data.pdf_pages} />}
+      {data.music_url && <audio ref={audioRef} src={img(data.music_url)} loop preload="none" data-testid="tour-music-audio" />}
     </div>
   );
 }

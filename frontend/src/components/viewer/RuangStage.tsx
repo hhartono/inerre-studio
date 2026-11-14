@@ -15,15 +15,15 @@ interface Props {
   tour: Scene[];
   index: number;
   setIndex: (fn: number | ((i: number) => number)) => void;
+  musicOn: boolean;
+  setMusicOn: (fn: boolean | ((m: boolean) => boolean)) => void;
 }
 
 const iconBtn = "glass inline-flex h-10 w-10 items-center justify-center text-paper transition-colors hover:text-brass";
 
-export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
+export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusicOn }: Props) {
   const scene = tour[index];
   const [playing, setPlaying] = useState(false);
-  const [musicOn, setMusicOn] = useState(false);
-  const audioRef = useRef<HTMLAudioElement>(null);
   const [sheet, setSheet] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
@@ -68,16 +68,6 @@ export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
       im.src = img(next.image_url);
     }
   }, [index, tour]);
-
-  useEffect(() => {
-    const a = audioRef.current;
-    if (!a) {
-      return;
-    }
-    a.volume = 0.6;
-    if (musicOn) a.play().catch(() => setMusicOn(false));
-    else a.pause();
-  }, [musicOn]);
 
   const togglePlay = () => {
     const next = !playing;
@@ -160,7 +150,6 @@ export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
       </div>
 
       <ThumbRail tour={tour} index={index} playing={playing} onSelect={(i) => setIndex(i)} />
-      {data.music_url && <audio ref={audioRef} src={img(data.music_url)} loop preload="none" data-testid="tour-music-audio" />}
 
       <Drawer open={sheet} onOpenChange={setSheet}>
         <DrawerContent className="max-h-[85vh] border-paper/10 bg-surface text-paper" data-testid="mobile-denah-sheet">

@@ -37,7 +37,7 @@ export function DenahView({ data, maps, tour, currentId, onOpen }: { data: ViewD
   if (!floor) return <p className="eyebrow p-10 text-paper/45">Belum ada lantai</p>;
 
   return (
-    <div className="flex flex-col md:h-[calc(100dvh-64px)] md:flex-row" data-testid="denah-view">
+    <div className="flex min-h-0 flex-1 flex-col md:flex-row" data-testid="denah-view">
       <aside className="hidden w-[320px] shrink-0 overflow-y-auto border-r border-paper/10 px-8 py-10 md:block">
         <p className="eyebrow mb-2 text-paper/45">Daftar area</p>
         <h2 className="display mb-8 text-2xl">{floor.name}</h2>
@@ -47,12 +47,12 @@ export function DenahView({ data, maps, tour, currentId, onOpen }: { data: ViewD
         <div className="px-5 md:px-10">
           <FloorTabs floors={data.floors} value={floorId} onChange={setFloorId} testid="denah-floor-tabs" />
         </div>
-        <div className="relative min-h-[60vh] flex-1 overflow-hidden md:min-h-0">
-          <TransformWrapper minScale={1} maxScale={5} centerOnInit wheel={{ step: 0.15 }} doubleClick={{ disabled: true }}>
+        <div className="relative min-h-0 flex-1 touch-none overflow-hidden overscroll-none">
+          <TransformWrapper minScale={1} maxScale={5} centerOnInit limitToBounds wheel={{ step: 0.15 }} doubleClick={{ disabled: true }} panning={{ velocityDisabled: true }}>
             {({ zoomIn, zoomOut, resetTransform }) => (
               <>
                 <TransformComponent wrapperStyle={{ width: "100%", height: "100%" }} contentStyle={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                  <div className="w-full max-w-[1100px] p-5 md:p-12">
+                  <div className="w-full max-w-[1100px] p-3 md:p-12">
                     <PlanView floor={floor} scenes={scenes} activeId={currentId} roomId={roomHover} numbers={maps.number} onSelect={onOpen} />
                   </div>
                 </TransformComponent>

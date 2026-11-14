@@ -1,0 +1,45 @@
+{
+  "summary": "Iteration 2 tested tour music, the PDF presentation (replacing Layout 3D), the clearer floor-plan pins and cones, and regressions. Backend: 40 pytest cases, 39 passed and 1 skipped (the last-admin guard, because 2 admins exist). New test_media.py covers: music upload (audio only, non-audio gives 400), the audio URL in the draft, audio served with Range requests (200 full, 206 for 0-99, 100- and -50, 416 out of range, 403 with a wrong-variant signature), PDF upload (non-PDF gives 400, 3 pages rendered to WebP with the right aspect), the client seeing music/PDF only after republish, the client getting 403 on uploads, and DELETE music/pdf keeping the old revision snapshot until the next publish. Frontend (Playwright, Clerk tickets, 1920 and 390x844): the sample project shows only the Ruang and Denah tabs and no music button. The media project shows a Presentasi tab on desktop and mobile with pages pdf-page-1..3 (no page 4) and a 01/03 counter. Music works: autoplay starts the tour and the audio (paused=false, currentTime advanced); pause stops both; music-toggle-btn turns music on and off without touching the tour (checked on desktop and mobile). Studio Pengaturan proyek: music upload shows an audio player, the file name and Hapus; PDF upload shows the file name and '2 HALAMAN'; both Hapus buttons work. Draft preview shows the tab and the music button right after upload, while the published Revisi 01 does not. The Layout 3D section is gone from the floor panel; plan upload, camera canvas and rooms are still there. Pins: 2-digit numbers sit inside the dots with a light halo, and cones have a gradient, an outline and a dashed direction line. The text is 11px at 390px width, and the numbers read clearly on desktop mini-plan, the Denah tab, the mobile Denah tab and the Ruang > Denah sheet. Regressions pass: hotspot navigation, thumbnails, mini-plan and sheet pin clicks, autoplay advancing, and Denah zoom. No critical bugs. Only minor issues were found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/img/{fid}/audio", "issue": "A malformed Range header ('bytes=abc-') causes a 500 (int() ValueError). 'bytes=10-5' returns 206 with an empty body and an invalid Content-Range, but it should return 416. Wrap the parsing in try/except and return 416 when start > end."},
+      {"endpoint": "POST /api/projects/{pid}/music", "issue": "An empty file returns 413 'File audio maksimal 30 MB'. It should return 400 'File kosong'."},
+      {"endpoint": "storage.get_object cache", "issue": "The LRU cache holds up to 200 objects with no byte limit. Audio files (up to 30 MB) and PDF pages are now cached too, so memory can grow to GBs. Add a byte cap or skip caching for audio."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PresentationView Watermark", "issue": "The watermark (text-white/[0.13] with mix-blend-overlay, and text-white/30) cannot be seen on white or light PDF pages, so PDF pages are effectively not watermarked. Use a dark or difference-blend variant for PDF pages.", "selector": "[data-testid='pdf-view'] [data-testid='render-watermark']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Viewer Denah, dense plans (sample project at 390px)", "issues": ["The active pin's group, with its 0.95-opacity cone, is drawn last over neighbouring pins, so the number '03' was partly hidden under the active pin 01's cone. Render all cones first, then all dots and numbers on top."]},
+      {"screen": "Viewer tabs + music", "issues": ["The audio element lives inside RuangStage, so switching to Denah or Presentasi unmounts it and the background music stops. Consider keeping music at the ViewerPage level so it keeps playing on the Presentasi tab."]},
+      {"screen": "Presentasi tab", "issues": ["The page counter under each page ('01 / 03', text-paper/40 and /25) has very low contrast."]},
+      {"screen": "Studio Pengaturan proyek", "issues": ["The music and PDF 'Hapus' buttons remove immediately, with no confirmation."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_media.py", "/app/backend/tests/test_inerre_api.py", "/app/backend/tests/setup_ui_media.py", "/app/test_reports/pytest/pytest_results_iter2.xml"],
+  "action_items": [
+    "Make the watermark visible on light PDF pages",
+    "Harden audio Range parsing: no 500 on malformed headers, 416 when start > end",
+    "Return 400 (not 413) for an empty music upload",
+    "PlanView: draw cones in a first pass and dots/numbers in a second pass so numbers are never covered",
+    "Optional: keep the music playing across viewer tabs; raise the PDF counter contrast; add confirms for removing media; add a byte cap to the storage cache"
+  ],
+  "critical_code_review_comments": [
+    "serve_image loads the whole audio file into memory for every Range request (cached by the 200-entry LRU with no size cap)",
+    "delete_music, delete_pdf and a replaced PDF never soft-delete the old file docs. This is fine for snapshots, but orphan objects pile up",
+    "upload_pdf uploads the original and then the pages in parallel. If one page upload fails with 502, the earlier pages are orphaned",
+    "server.py is now 753 lines, over the 700-line guideline. Split the routes (users / projects / media / floors-scenes / images)",
+    "FloorUpdate still accepts layout3d_caption and with_urls still returns layout3d_url, which is dead code now that Layout 3D is removed"
+  ],
+  "updated_files": ["/app/backend/tests/test_inerre_api.py (area expectation changed to '' for new scenes)", "/app/backend/tests/test_media.py (new)", "/app/backend/tests/setup_ui_media.py (new)"],
+  "success_rate": {"backend": "100% (39/39 passed, 1 skipped)", "frontend": "95% (all requested flows work; 1 medium watermark issue, the rest are design nits)"},
+  "test_credentials": "Used the admin and client accounts from /app/memory/test_credentials.md through Clerk sessions and sign-in tickets. The accounts were not changed.",
+  "seed_data_creation": "Created TEST_T1 Media (pytest) and two 'TEST_UI Media T1' projects (setup_ui_media.py). All were deleted by id. The sample project is unchanged: Revisi 01, client assigned, no music or PDF.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_media.py test_inerre_api.py -n 0 -q. For a UI fixture run `python setup_ui_media.py` (add 'nomedia' to skip music/PDF). It prints PID and SIDS and the project is assigned to the client. Delete it with `python setup_ui_media.py delete <pid>`. Headless Chromium plays the audio (paused=false). SVG pin numbers need textContent, not inner_text. To click a pin, click the last circle inside plan-pin-{sid}, because the g bbox centre can miss."
+}

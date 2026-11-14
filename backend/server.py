@@ -491,7 +491,9 @@ async def upload_music(pid: str, file: UploadFile = File(...), member: dict = De
     data = await file.read()
     if not ct.startswith("audio/"):
         raise HTTPException(400, "File harus berupa audio (mp3, m4a, wav)")
-    if not data or len(data) > 30 * 1024 * 1024:
+    if not data:
+        raise HTTPException(400, "File kosong")
+    if len(data) > 30 * 1024 * 1024:
         raise HTTPException(413, "File audio maksimal 30 MB")
     fid = new_id()
     ext = (file.filename or "a.mp3").rsplit(".", 1)[-1].lower()[:5]
@@ -721,11 +723,17 @@ async def serve_image(fid: str, variant: str, request: Request, e: int = Query(.
     mime = rec.get("content_type") or "audio/mpeg"
     rng = request.headers.get("range", "")
     if rng.startswith("bytes="):
-        start_s, _, end_s = rng[6:].split(",")[0].partition("-")
         size = len(data)
-        start = int(start_s) if start_s else max(0, size - int(end_s or 0))
-        end = min(int(end_s), size - 1) if start_s and end_s else size - 1
-        if start >= size:
+        try:
+            start_s, _, end_s = rng[6:].split(",")[0].strip().partition("-")
+            if start_s:
+                start = int(start_s)
+                end = min(int(end_s), size - 1) if end_s else size - 1
+            else:
+                start, end = max(0, size - int(end_s)), size - 1
+        except ValueError:
+            start, end = size, -1
+        if start >= size or start > end:
             return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
         headers["Content-Range"] = f"bytes {start}-{end}/{size}"
         return Response(content=data[start:end + 1], status_code=206, media_type=mime, headers=headers)

@@ -1,4 +1,5 @@
 import { pad } from "@/lib/api";
+import { pinColor } from "@/lib/viewer";
 import type { ViewMaps } from "@/lib/viewer";
 import type { Room, Scene } from "@/types";
 
@@ -29,6 +30,7 @@ export function AreaList({ rooms, scenes, maps, activeId, onSelect, onHoverRoom 
                     data-testid={`area-scene-${s.id}`}
                   >
                     <span className="eyebrow w-6 shrink-0 text-paper/35">{pad(maps.number[s.id] || 0)}</span>
+                    <span className="h-2 w-2 shrink-0 self-center rounded-full" style={{ background: pinColor(maps.number[s.id]) }} data-testid={`area-scene-color-${s.id}`} />
                     <span className="truncate">{s.title || "Tanpa judul"}</span>
                   </button>
                 </li>

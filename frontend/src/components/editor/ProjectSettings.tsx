@@ -31,6 +31,7 @@ function MediaSettings() {
     setBusy("");
   };
   const remove = async (kind: "music" | "pdf") => {
+    if (!window.confirm(kind === "music" ? "Hapus musik tur?" : "Hapus PDF presentasi?")) return;
     await api.delete(`/projects/${p.id}/${kind}`).catch((e) => toast.error(errMsg(e)));
     reload();
   };

@@ -18,3 +18,6 @@ export function buildMaps(data: { floors: Floor[]; rooms: Room[]; scenes: Scene[
 
 export const tourScenes = (data: ViewData | null, maps: ViewMaps | null) =>
   data && maps ? data.tour_order.map((id) => maps.scene[id]).filter(Boolean) : [];
+
+const PIN_COLORS = ["#e07a5f", "#81b29a", "#6fa8dc", "#f2cc8f", "#c49bc4", "#e5989b", "#5fb3b3", "#d4a373", "#a3c4f3", "#c6b38b"];
+export const pinColor = (n?: number) => PIN_COLORS[((n || 1) - 1) % PIN_COLORS.length];

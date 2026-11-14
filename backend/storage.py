@@ -15,6 +15,7 @@ URL_TTL = 6 * 3600
 _storage_key = None
 _cache: "OrderedDict[str, bytes]" = OrderedDict()
 _CACHE_MAX = 200
+_CACHE_BYTES = 300 * 1024 * 1024
 
 
 def _storage_url() -> str:
@@ -56,7 +57,7 @@ def get_object(path: str) -> bytes:
         return _cache[path]
     data = _request("GET", path).content
     _cache[path] = data
-    if len(_cache) > _CACHE_MAX:
+    while len(_cache) > _CACHE_MAX or sum(len(v) for v in _cache.values()) > _CACHE_BYTES:
         _cache.popitem(last=False)
     return data
 

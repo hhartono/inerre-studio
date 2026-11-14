@@ -134,7 +134,7 @@ class TestStaffFlow:
             assert s["image_url"].startswith(f"/api/img/{s['image_file_id']}/web?e=")
             assert "/thumb?e=" in s["thumb_url"]
             assert s["title"] == f"TEST scene {i}"
-            assert s["area"] == "Ruang Tamu"
+            assert s["area"] == ""  # new scenes start with empty area (iteration_2 change)
             ids.append(s["id"])
         self.state["sids"] = ids
         bad = designer.post(f"/api/rooms/{rid}/scenes", files={"file": ("x.txt", b"hello", "text/plain")})
