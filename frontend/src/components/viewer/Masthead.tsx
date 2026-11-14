@@ -15,7 +15,7 @@ export function Masthead({ data, tab, setTab, backTo }: { data: ViewData; tab: V
   const TABS = ALL_TABS.filter((t) => t.id !== "pdf" || data.pdf_pages?.length);
   return (
     <header className="sticky top-0 z-50 border-b border-paper/10 bg-ink/85 backdrop-blur-xl" data-testid="viewer-masthead">
-      <div className="flex h-14 items-center gap-4 px-4 md:h-16 md:gap-8 md:px-8">
+      <div className="flex h-14 items-center gap-4 px-4 md:h-16 md:gap-8 md:px-8 short:h-11">
         <Link to={backTo} className="text-paper/50 transition-colors hover:text-brass" title="Kembali" data-testid="viewer-back-link">
           <ArrowLeft size={16} />
         </Link>
@@ -25,16 +25,16 @@ export function Masthead({ data, tab, setTab, backTo }: { data: ViewData; tab: V
         <span className={`eyebrow shrink-0 border px-2.5 py-1 text-[9px] ${data.mode === "draft" ? "border-amber-300/40 text-amber-200" : "border-brass/50 text-brass"}`} data-testid="viewer-revision-badge">
           {badge}
         </span>
-        <nav className="ml-auto hidden gap-8 md:flex">
+        <nav className="ml-auto hidden gap-8 md:flex short:flex short:gap-6">
           {TABS.map((t) => (
-            <button key={t.id} onClick={() => setTab(t.id)} className={`eyebrow relative py-5 transition-colors ${tab === t.id ? "text-brass" : "text-paper/55 hover:text-paper"}`} data-testid={`viewer-tab-${t.id}`}>
+            <button key={t.id} onClick={() => setTab(t.id)} className={`eyebrow relative py-5 transition-colors short:py-3 ${tab === t.id ? "text-brass" : "text-paper/55 hover:text-paper"}`} data-testid={`viewer-tab-${t.id}`}>
               {t.label}
               {tab === t.id && <span className="absolute inset-x-0 bottom-0 h-px bg-brass" />}
             </button>
           ))}
         </nav>
       </div>
-      <nav className="grid border-t border-paper/10 md:hidden" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}>
+      <nav className="grid border-t border-paper/10 md:hidden short:hidden" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}>
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`eyebrow py-3 text-[9.5px] transition-colors ${tab === t.id ? "bg-surface text-brass" : "text-paper/55"}`} data-testid={`viewer-tab-mobile-${t.id}`}>
             {t.label}

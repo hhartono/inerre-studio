@@ -10,6 +10,8 @@ interface Track {
   id: string;
   title: string;
   artist: string;
+  genre: string;
+  license: string;
   url: string;
 }
 
@@ -87,18 +89,22 @@ export function MusicPicker() {
 
   return (
     <Section title="Musik tur">
-      <p className="mb-5 text-sm text-paper/45">Diputar saat klien menjalankan tur. Lagu bawaan adalah rekaman musik klasik domain publik. Klien bisa mematikannya.</p>
+      <p className="mb-5 text-sm text-paper/45">Diputar saat klien menjalankan tur. Lagu bawaan: musik klasik domain publik dan musik kontemporer berlisensi bebas (CC0 / CC BY, kredit tampil otomatis di viewer). Klien bisa mematikannya.</p>
       <div className="space-y-2" data-testid="music-picker">
-        {tracks.map((t) => (
-          <div key={t.id} className="flex items-center gap-2">
+        {tracks.map((t, i) => (
+          <div key={t.id}>
+            {(i === 0 || tracks[i - 1].genre !== t.genre) && <p className="eyebrow pb-2 pt-4 text-paper/45" data-testid={`music-genre-${t.genre}`}>{t.genre}</p>}
+          <div className="flex items-center gap-2">
             <div className="flex-1">
               <Row active={source === "system" && track === t.id} onPick={() => choose("system", t.id)} testid={`music-track-${t.id}`}>
                 <span className="truncate text-sm">{t.title}</span>
                 <span className="eyebrow hidden truncate text-paper/40 sm:inline">{t.artist}</span>
+                {t.license.startsWith("CC BY") && <span className="eyebrow hidden shrink-0 text-[9px] text-paper/30 md:inline">{t.license}</span>}
                 {t.id === def && <span className="eyebrow ml-auto shrink-0 text-[9px] text-brass">Default</span>}
               </Row>
             </div>
             <PreviewBtn id={t.id} url={t.url} />
+          </div>
           </div>
         ))}
         {p.music_file_id && (
@@ -112,12 +118,13 @@ export function MusicPicker() {
             <button onClick={removeUpload} className="shrink-0 p-2 text-paper/45 transition-colors hover:text-red-400" data-testid="music-remove-btn"><Trash2 size={14} /></button>
           </div>
         )}
-        <div className="flex items-center gap-2 pr-[30px]">
+        <div className="flex items-center gap-2 pt-4">
           <div className="flex-1">
             <Row active={source === "none"} onPick={() => choose("none")} testid="music-none-option">
               <span className="text-sm text-paper/70">Tanpa musik</span>
             </Row>
           </div>
+          <span className="w-[30px] shrink-0" />
         </div>
       </div>
       <label className={`${btnGhost} mt-5 cursor-pointer ${busy ? "pointer-events-none opacity-60" : ""}`} data-testid="upload-music">

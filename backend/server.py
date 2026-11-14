@@ -409,11 +409,16 @@ async def delete_project(pid: str, _: dict = Depends(admin_only)):
 
 
 TRACKS = [
-    {"id": "gymnopedie-1", "title": "Gymnopédie No. 1", "artist": "Erik Satie"},
-    {"id": "clair-de-lune", "title": "Clair de Lune", "artist": "Claude Debussy"},
-    {"id": "nocturne-op9-2", "title": "Nocturne Op. 9 No. 2", "artist": "Frédéric Chopin"},
-    {"id": "gnossienne-1", "title": "Gnossienne No. 1", "artist": "Erik Satie"},
-    {"id": "air-bach", "title": "Air on the G String", "artist": "J. S. Bach"},
+    {"id": "gymnopedie-1", "title": "Gymnopédie No. 1", "artist": "Erik Satie", "genre": "Klasik", "license": "CC0"},
+    {"id": "clair-de-lune", "title": "Clair de Lune", "artist": "Claude Debussy", "genre": "Klasik", "license": "Public domain"},
+    {"id": "nocturne-op9-2", "title": "Nocturne Op. 9 No. 2", "artist": "Frédéric Chopin", "genre": "Klasik", "license": "Public domain"},
+    {"id": "gnossienne-1", "title": "Gnossienne No. 1", "artist": "Erik Satie", "genre": "Klasik", "license": "Public domain"},
+    {"id": "air-bach", "title": "Air on the G String", "artist": "J. S. Bach", "genre": "Klasik", "license": "Public domain"},
+    {"id": "chill-out-theme", "title": "Chill Out Theme", "artist": "Komiku", "genre": "Kontemporer", "license": "CC0"},
+    {"id": "softly", "title": "Softly", "artist": "Loyalty Freak Music", "genre": "Kontemporer", "license": "CC0"},
+    {"id": "meekness", "title": "Meekness", "artist": "Kai Engel", "genre": "Kontemporer", "license": "CC BY 4.0"},
+    {"id": "chill-breeze", "title": "Chill Breeze", "artist": "Evan Schaeffer", "genre": "Kontemporer", "license": "CC BY 4.0"},
+    {"id": "lofi-upbeat", "title": "Lofi Hip Hop Upbeat", "artist": "Raspberrymusic", "genre": "Kontemporer", "license": "CC BY 4.0"},
 ]
 TRACK_IDS = {t["id"]: t for t in TRACKS}
 DEFAULT_TRACK = "gymnopedie-1"
@@ -432,7 +437,8 @@ def media_urls(music: Optional[dict], pdf) -> dict:
         url, title = storage.signed_url(music["file_id"], "audio"), "Musik unggahan"
     elif music["source"] == "system":
         t = TRACK_IDS.get(music.get("track")) or TRACK_IDS[DEFAULT_TRACK]
-        url, title = f"/music/{t['id']}.mp3", f"{t['title']} · {t['artist']}"
+        url = f"/music/{t['id']}.mp3"
+        title = f"{t['title']} · {t['artist']}" + (f" ({t['license']})" if t["license"].startswith("CC BY") else "")
     return {"music_url": url, "music_title": title,
             "pdf_pages": [{"url": storage.signed_url(pg["file_id"]), "aspect": pg["aspect"]} for pg in pages]}
 

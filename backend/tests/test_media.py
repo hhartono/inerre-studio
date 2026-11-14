@@ -27,11 +27,12 @@ def make_pdf(n=3):
     return doc.tobytes()
 
 
-# ---- Sample project must have no media ----
-class TestSampleNoMedia:
-    def test_sample_view_no_media(self, client_user):
+# ---- Sample project: Revisi 02 has default system track, no PDF (iteration_4) ----
+class TestSampleMedia:
+    def test_sample_view_default_music(self, client_user):
         d = client_user.get(f"/api/projects/{SAMPLE_PID}/view").json()
-        assert d["music_url"] is None
+        assert d["revision"]["number"] >= 2
+        assert d["music_url"] == "/music/gymnopedie-1.mp3"
         assert d["pdf_pages"] == []
 
 
@@ -113,7 +114,8 @@ class TestMedia:
     def test_07_client_sees_media_after_publish_only(self, designer, client_user):
         pid = self.state["pid"]
         v = client_user.get(f"/api/projects/{pid}/view").json()
-        assert v["music_url"] is None and v["pdf_pages"] == []
+        # rev 1 published before upload -> default system track (iteration_4)
+        assert v["music_url"] == "/music/gymnopedie-1.mp3" and v["pdf_pages"] == []
         assert designer.post(f"/api/projects/{pid}/publish").json()["number"] == 2
         v = client_user.get(f"/api/projects/{pid}/view").json()
         assert v["music_url"] and len(v["pdf_pages"]) == 3
@@ -130,12 +132,13 @@ class TestMedia:
         r = designer.delete(f"/api/projects/{pid}/pdf")
         assert r.status_code == 200 and r.json()["pdf"] is None
         d = designer.get(f"/api/projects/{pid}/draft").json()
-        assert d["music_url"] is None and d["pdf_pages"] == []
+        # iteration_4: deleting upload falls back to system default track
+        assert d["music_url"] == "/music/gymnopedie-1.mp3" and d["pdf_pages"] == []
         v = client_user.get(f"/api/projects/{pid}/view").json()
-        assert v["music_url"] and len(v["pdf_pages"]) == 3  # rev 2 snapshot keeps media
+        assert "/audio?e=" in v["music_url"] and len(v["pdf_pages"]) == 3  # rev 2 snapshot keeps media
         designer.post(f"/api/projects/{pid}/publish")
         v = client_user.get(f"/api/projects/{pid}/view").json()
-        assert v["music_url"] is None and v["pdf_pages"] == []
+        assert v["music_url"] == "/music/gymnopedie-1.mp3" and v["pdf_pages"] == []
 
     def test_99_cleanup(self, admin):
         pid = self.state.get("pid")

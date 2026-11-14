@@ -81,11 +81,11 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   };
 
   return (
-    <div className="flex flex-col md:h-[calc(100dvh-64px)]" data-testid="ruang-view">
-      <div className="flex flex-col md:min-h-0 md:flex-1 md:flex-row">
+    <div className="flex flex-col md:h-[calc(100dvh-64px)] short:h-[calc(100dvh-44px)]" data-testid="ruang-view">
+      <div className="flex flex-col md:min-h-0 md:flex-1 md:flex-row short:min-h-0 short:flex-1">
         <div
           ref={stageRef}
-          className="relative h-[58vh] shrink-0 overflow-hidden bg-ink md:h-auto md:flex-1"
+          className="relative h-[58vh] shrink-0 overflow-hidden bg-ink md:h-auto md:flex-1 short:h-auto short:flex-1"
           onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
           onTouchEnd={(e) => {
             if (touchX.current === null) return;
@@ -97,7 +97,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
         >
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />
           <div className="absolute inset-0 bg-ink/35" />
-          <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 px-4 py-3 md:px-8 md:py-5" data-testid="scene-topline">
+          <div className="absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-4 px-4 py-3 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
             <p className="eyebrow min-w-0 truncate text-paper/80">
               {floor?.name} <span className="text-brass">/</span> {room?.name}
               {scene.area && scene.area !== room?.name ? <span className="text-paper/50"> · {scene.area}</span> : null}
@@ -116,7 +116,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               </button>
             </div>
           </div>
-          <div className="absolute inset-0 px-2 pb-10 pt-16 md:px-20 md:pb-10 md:pt-20">
+          <div className="absolute inset-0 px-2 pb-10 pt-16 md:px-16 md:pb-6 md:pt-[72px] short:px-14 short:pb-1.5 short:pt-1.5">
             <div className="relative h-full w-full">
               <StageImage scene={scene} valid={valid} onGo={goTo} />
             </div>
@@ -127,12 +127,16 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           <button onClick={() => go(1)} className={`${iconBtn} absolute right-2 top-1/2 z-20 -translate-y-1/2 md:right-6 md:h-12 md:w-12`} data-testid="next-scene-btn">
             <ChevronRight size={18} />
           </button>
-          <button onClick={() => setSheet(true)} className="glass eyebrow absolute bottom-3 right-3 z-20 inline-flex items-center gap-2 px-4 py-2.5 text-paper md:hidden" data-testid="mobile-denah-btn">
+          <button onClick={() => setSheet(true)} className="glass eyebrow absolute bottom-3 right-3 z-20 inline-flex items-center gap-2 px-4 py-2.5 text-paper md:hidden short:inline-flex" data-testid="mobile-denah-btn">
             <MapIcon size={13} /> Denah
           </button>
+          <div key={`o-${scene.id}`} className="glass absolute bottom-3 left-3 z-20 hidden max-w-[45%] px-3 py-2 short:block fade-up" data-testid="landscape-story-overlay">
+            <p className="eyebrow text-[9px] text-brass">{pad(index + 1)} / {pad(tour.length)}</p>
+            <p className="truncate text-sm">{scene.title || "Tanpa judul"}</p>
+          </div>
         </div>
 
-        <aside className="px-5 py-7 md:flex md:w-[380px] md:flex-col md:overflow-y-auto md:border-l md:border-paper/10 md:px-8 md:py-10" data-testid="story-panel">
+        <aside className="px-5 py-7 md:flex md:w-[380px] md:flex-col md:overflow-y-auto md:border-l md:border-paper/10 md:px-8 md:py-10 short:hidden" data-testid="story-panel">
           <div key={scene.id} className="fade-up">
             <p className="eyebrow text-brass" data-testid="story-number">
               {pad(index + 1)} <span className="text-paper/35">/ {pad(tour.length)}</span>

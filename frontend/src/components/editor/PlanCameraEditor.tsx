@@ -130,7 +130,10 @@ export function PlanCameraEditor({ floor }: { floor: Floor }) {
               value={[fov]}
               disabled={!sel?.camera && !live}
               onValueChange={([v]) => update({ ...(liveRef.current || sel!.camera!), fov: v })}
-              onValueCommit={() => save(liveRef.current)}
+              onValueCommit={([v]) => {
+                const base = liveRef.current || sel?.camera;
+                if (base) save({ ...base, fov: v });
+              }}
               data-testid="camera-fov-slider"
             />
           </div>

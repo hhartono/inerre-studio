@@ -9,6 +9,9 @@ module.exports = {
   ],
   theme: {
     extend: {
+      screens: {
+        short: { raw: '(orientation: landscape) and (max-height: 520px)' },
+      },
       borderRadius: {
         lg: 'var(--radius)',
         md: 'calc(var(--radius) - 2px)',

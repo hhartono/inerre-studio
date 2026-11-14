@@ -9,7 +9,7 @@ export function ThumbRail({ tour, index, playing, onSelect }: { tour: Scene[]; i
     activeRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
   }, [index]);
   return (
-    <div className="no-scrollbar flex gap-2 overflow-x-auto border-t border-paper/10 bg-ink px-4 py-3 md:gap-3 md:px-8 md:py-4" data-testid="thumb-rail">
+    <div className="no-scrollbar flex gap-2 overflow-x-auto border-t border-paper/10 bg-ink px-4 py-3 md:gap-3 md:px-8 md:py-4 short:hidden" data-testid="thumb-rail">
       {tour.map((s, i) => {
         const active = i === index;
         return (
