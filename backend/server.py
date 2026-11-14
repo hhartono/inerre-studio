@@ -144,7 +144,7 @@ class ProjectIn(BaseModel):
 
 
 class ProjectUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
     code: Optional[str] = None
     client_emails: Optional[List[str]] = None
 
@@ -154,7 +154,7 @@ class NameIn(BaseModel):
 
 
 class FloorUpdate(BaseModel):
-    name: Optional[str] = None
+    name: Optional[str] = Field(None, min_length=1, max_length=120)
     layout3d_caption: Optional[str] = None
 
 
@@ -244,9 +244,12 @@ def validate_structure(floors, rooms, scenes) -> dict:
     for s in scenes:
         name = s.get("title") or "Tanpa judul"
         for h in s.get("hotspots", []):
-            if not h.get("target_scene_id") or h["target_scene_id"] not in ids:
+            if not h.get("target_scene_id"):
+                errors.append({"code": "no_target", "scene_id": s["id"],
+                               "message": f"Hotspot \"{h.get('label') or '—'}\" di scene \"{name}\" belum punya scene tujuan."})
+            elif h["target_scene_id"] not in ids:
                 errors.append({"code": "broken_link", "scene_id": s["id"],
-                               "message": f"Hotspot \"{h.get('label') or '—'}\" di scene \"{name}\" mengarah ke scene yang tidak ada."})
+                               "message": f"Hotspot \"{h.get('label') or '—'}\" di scene \"{name}\" mengarah ke scene yang sudah dihapus."})
         if s.get("hotspots_need_check"):
             errors.append({"code": "needs_check", "scene_id": s["id"],
                            "message": f"Render scene \"{name}\" berganti rasio. Hotspot perlu dicek dan dikonfirmasi."})
@@ -277,9 +280,13 @@ async def save_upload(file: UploadFile, project_id: str, kind: str) -> dict:
     ext = (file.filename or "img").rsplit(".", 1)[-1].lower()[:5] or "bin"
     base = f"{storage.APP_NAME}/projects/{project_id}/{fid}"
     paths = {}
-    for variant, payload, mime in (("original", data, ct), ("web", proc["web"], "image/webp"), ("thumb", proc["thumb"], "image/webp")):
-        res = await run_in_threadpool(storage.put_object, f"{base}/{variant}.{ext if variant == 'original' else 'webp'}", payload, mime)
-        paths[variant] = res["path"]
+    try:
+        for variant, payload, mime in (("original", data, ct), ("web", proc["web"], "image/webp"), ("thumb", proc["thumb"], "image/webp")):
+            res = await run_in_threadpool(storage.put_object, f"{base}/{variant}.{ext if variant == 'original' else 'webp'}", payload, mime)
+            paths[variant] = res["path"]
+    except requests.RequestException as e:
+        logger.error(f"Storage upload failed: {e}")
+        raise HTTPException(502, "Penyimpanan gambar sedang bermasalah. Coba unggah lagi.")
     doc = {"id": fid, "project_id": project_id, "kind": kind, "original_filename": file.filename, "content_type": ct,
            "paths": paths, "width": proc["width"], "height": proc["height"], "aspect": proc["aspect"],
            "is_deleted": False, "created_at": now_iso()}
@@ -543,7 +550,7 @@ async def create_scene(rid: str, file: UploadFile = File(...), member: dict = De
     order = await db.scenes.count_documents({"room_id": rid})
     title = Path(file.filename or "").stem.replace("_", " ").replace("-", " ").strip()[:80]
     doc = {"id": new_id(), "project_id": r["project_id"], "floor_id": r["floor_id"], "room_id": rid, "title": title,
-           "description": "", "area": r["name"], "image_file_id": up["id"], "aspect": up["aspect"], "order": order,
+           "description": "", "area": "", "image_file_id": up["id"], "aspect": up["aspect"], "order": order,
            "hotspots": [], "camera": None, "hotspots_need_check": False, "created_at": now_iso()}
     await db.scenes.insert_one({**doc})
     await db.projects.update_one({"id": r["project_id"]}, {"$push": {"tour_order": doc["id"]}, "$set": {"updated_at": now_iso()}})

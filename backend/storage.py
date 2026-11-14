@@ -36,6 +36,9 @@ def _request(method: str, path: str, **kw) -> requests.Response:
         key = init_storage(force=attempt > 0)
         headers = {"X-Storage-Key": key, **kw.pop("headers", {})}
         resp = requests.request(method, f"{_storage_url()}/objects/{path}", headers=headers, timeout=120, **kw)
+        if resp.status_code >= 500 and attempt == 0:
+            time.sleep(1)
+            continue
         if resp.status_code != 404 or attempt == 1:
             resp.raise_for_status()
             return resp

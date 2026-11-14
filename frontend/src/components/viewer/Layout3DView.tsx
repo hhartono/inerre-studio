@@ -13,8 +13,8 @@ export function Layout3DView({ data }: { data: ViewData }) {
     <div className="px-5 pb-16 md:px-10" data-testid="layout3d-view">
       <FloorTabs floors={floors} value={floor.id} onChange={setFloorId} testid="layout3d-floor-tabs" />
       <div key={floor.id} className="grid gap-8 pt-8 lg:grid-cols-[1fr_320px] lg:gap-14 lg:pt-12 fade-up">
-        <div className="protect relative bg-surface">
-          <img src={img(floor.layout3d_url)} alt={floor.name} className="w-full select-none object-contain" draggable={false} onContextMenu={(e) => e.preventDefault()} data-testid="layout3d-image" />
+        <div className="protect relative mx-auto w-fit bg-surface">
+          <img src={img(floor.layout3d_url)} alt={floor.name} className="block max-h-[calc(100dvh-220px)] w-auto max-w-full select-none object-contain" draggable={false} onContextMenu={(e) => e.preventDefault()} data-testid="layout3d-image" />
           <Watermark />
         </div>
         <div>

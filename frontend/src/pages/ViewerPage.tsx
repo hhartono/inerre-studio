@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import { api, errMsg, pad } from "@/lib/api";
 import { buildMaps, tourScenes } from "@/lib/viewer";
 import { useMe } from "@/context/MeContext";
@@ -57,6 +57,7 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
       <div className="flex min-h-screen flex-col justify-center bg-ink px-6 md:px-16" data-testid="viewer-error">
         <p className="eyebrow mb-4 text-brass">INERRE</p>
         <p className="text-lg">{error}</p>
+        <Link to="/" className="eyebrow mt-8 w-fit border border-paper/20 px-6 py-3 transition-colors hover:border-brass hover:text-brass" data-testid="viewer-error-home-link">Kembali ke beranda</Link>
       </div>
     );
   }

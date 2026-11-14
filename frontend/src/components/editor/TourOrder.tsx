@@ -41,7 +41,7 @@ export function TourOrder() {
       <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="eyebrow mb-3 text-brass">Urutan tur autoplay</p>
-          <h2 className="display text-3xl">Seret untuk mengurutkan</h2>
+          <h2 className="display text-3xl">Seret atau pakai panah</h2>
         </div>
         <button disabled={!dirty} onClick={save} className={btn} data-testid="tour-save-btn">Simpan urutan</button>
       </div>

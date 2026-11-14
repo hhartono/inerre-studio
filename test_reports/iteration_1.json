@@ -1,0 +1,48 @@
+{
+  "summary": "First full test run of the INERRE Presentation System (Phase 1-2). Backend: 29 pytest cases (auth/401, /me roles, role isolation for client and designer, admin users/roles/invites, staff CRUD for project/floor/room/scene, plan and layout3d upload, signed image URLs, the aspect-change needs_check flow, broken_link blocking, idempotent backlink, tour order, publish revisions and frozen snapshot) all pass. The last-admin 409 test was skipped because 2 admins exist (hans@inerre.com + test admin). One flaky failure: object storage returned 500 on a scene upload and the API passed it through as a 500 (1 of 3 runs). Frontend (Playwright, logged in with Clerk tickets): landing page and signed-out redirects work. Client viewer works on desktop and at 390px: masthead, Revisi badge, tabs, topline, story number, prev/next, arrow keys, thumbnails, autoplay advancing after about 7s with a progress bar, fullscreen, hotspot navigation, mini-plan pins, #scene deep link and hash updates, the mobile Denah and Daftar area bottom sheets, Denah pins, view cones, area list and zoom, and Layout 3D. Studio flow works end to end through the UI with saved data checked by API: new project dialog, add floor and room, multi-render upload, plan and layout3d upload with caption, camera place and drag direction, FOV slider, room rename, scene title/area/description save, hotspot add/target/label/drag/delete, Buat link balik, needs-check banner and confirm, tour up/down and drag, publish panel blocking (button disabled on broken_link and needs_check), publish Revisi 01 then 02, Preview · Draft, assigning a client in project settings, and the client seeing the new revision. Admin page invite create/delete and role selects work. Role guards in the UI work: client is redirected from /studio, /preview and /admin; designer gets no delete button, a disabled client-emails field and no admin nav.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/rooms/{rid}/scenes (save_upload)", "issue": "Flaky (1 of 3 runs): object storage PUT returned 500 (integrations objstore thumb.webp) and the error was not handled, so the API returned a bare 500. storage._request only retries on 404 and save_upload has no try/except around put_object, so a failed thumb upload leaves orphan original/web objects. Add retry on 5xx and a 502/503 HTTPException with a friendly message."},
+      {"endpoint": "PATCH /api/projects/{pid}, PATCH /api/floors/{fid}", "issue": "ProjectUpdate.name and FloorUpdate.name have no min_length, so an empty name can be saved."},
+      {"endpoint": "GET /api/projects/{pid}/validate", "issue": "A hotspot with no target yet gets the same message as a deleted target ('mengarah ke scene yang tidak ada'). The UI badge correctly says 'Belum ada tujuan'; the validation text is misleading."},
+      {"endpoint": "POST /api/rooms/{rid}/scenes", "issue": "scene.area is copied from the room name at creation and does not follow later room renames. The viewer topline then shows 'Ruang Tamu Renamed · Ruang Tamu UI'."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ViewerPage error state", "issue": "The 'Proyek tidak ditemukan' screen for a bad or unassigned project id has no back link or navigation, so the user is stuck.", "selector": "[data-testid='viewer-error']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Studio/Admin top nav at 390px", "issues": ["Nav items overflow: 'TAMPILAN KLIEN' wraps onto 2 lines and 'TIM & KLIEN' is cut off ('TIM KLI') next to the avatar. Needs a scrollable or collapsed mobile nav."]},
+      {"screen": "Viewer Layout 3D tab at 1920x1080", "issues": ["The floor image is taller than the viewport, so the bottom and the watermark are cut off below the fold. Consider fitting it to the viewport height (object-contain, max-h)."]},
+      {"screen": "Tour order panel (mobile-first)", "issues": ["Reordering uses native HTML5 draggable, which does not work on touch devices; only the up/down buttons work on mobile. Acceptable fallback, but the heading 'Seret untuk mengurutkan' is misleading on touch."]},
+      {"screen": "Viewer Ruang at 390px", "issues": ["The prev/next arrow buttons sit over the render edges and cover part of the image; minor."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_inerre_api.py", "/app/backend/tests/conftest.py", "/app/backend/tests/ticket.py", "/app/backend/tests/check_ui_project.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Handle object-storage errors in save_upload/storage._request: retry on 5xx and return 502/503 with a message instead of a bare 500",
+    "Fix the mobile (390px) header nav overflow in Studio/Admin",
+    "Make the Layout 3D image fit the viewport height on desktop",
+    "Add min_length=1 to ProjectUpdate.name and FloorUpdate.name",
+    "Use a separate validation message for hotspots with no target vs a deleted target",
+    "Optional: add a back link on the viewer error state; consider syncing scene.area with room renames (or leave it empty by default)"
+  ],
+  "critical_code_review_comments": [
+    "storage._request retries only on 404 (key refresh); transient 5xx from objstore surface as 500s, and partial multi-variant uploads leave orphan objects",
+    "Signed image URLs are not tied to a user (valid for up to about 7h for anyone holding the link). Acceptable for this design, but note it for privacy",
+    "PUT /projects/{pid}/tour stores any ids without validation (harmless because effective_tour filters them)",
+    "server.py is 650 lines, close to the 700-line limit; consider splitting routes (users/projects/scenes/images) before Phase 3",
+    "delete_scene/delete_room do not clear hotspots pointing at the removed scenes. This is intentional (validation reports broken_link), but the editor could offer an auto-clean"
+  ],
+  "updated_files": ["/app/backend/tests/conftest.py", "/app/backend/tests/test_inerre_api.py", "/app/backend/tests/ticket.py", "/app/backend/tests/check_ui_project.py"],
+  "success_rate": {"backend": "100% (28/28 executed pass on rerun; 1 skipped; 1 flaky upload 500 caused by object storage)", "frontend": "97% (all requested flows work; only minor design issues)"},
+  "flaky_tests": ["TestStaffFlow::test_02_scenes_upload - object storage 500 in 1 of 3 runs"],
+  "test_credentials": "Used admin/designer/client from /app/memory/test_credentials.md through Clerk Backend API sessions and sign-in tickets. No changes made to these accounts.",
+  "seed_data_creation": "Created TEST_T1 Project (via pytest) and TEST_UI Project T1 (via UI); both deleted by id as admin. Created and deleted the invites TEST_invite_t1@example.com and test_ui_invite_t1@example.com. The sample project was not modified (still Revisi 01, 6 scenes, client assigned). Projects 'LDG' and 'Test' existed already and were not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && python -m pytest test_inerre_api.py -n 0 -v. conftest.ClerkClient makes Clerk sessions and refreshes the 60s JWT (tokens POST needs json={} or Clerk returns 415). For UI sign-in run `python ticket.py <role>` in /app/backend/tests to get a ticket, then open /sign-in?__clerk_ticket=<t>. The browser_automation tool can call subprocess for ticket.py. The viewer Layout tab testid is viewer-tab-layout (not layout3d). The FOV slider is a Radix Slider: use [data-testid=camera-fov-slider] [role=slider] with keyboard. The last-admin 409 test is skipped while hans@inerre.com is also an admin."
+}
