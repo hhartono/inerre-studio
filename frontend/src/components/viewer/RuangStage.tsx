@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Map as MapIcon, Pause, Play } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Map as MapIcon, Music2, Pause, Play, VolumeX } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { img, pad } from "@/lib/api";
 import type { ViewMaps } from "@/lib/viewer";
@@ -22,6 +22,8 @@ const iconBtn = "glass inline-flex h-10 w-10 items-center justify-center text-pa
 export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
   const scene = tour[index];
   const [playing, setPlaying] = useState(false);
+  const [musicOn, setMusicOn] = useState(false);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [sheet, setSheet] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
@@ -67,6 +69,22 @@ export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
     }
   }, [index, tour]);
 
+  useEffect(() => {
+    const a = audioRef.current;
+    if (!a) {
+      return;
+    }
+    a.volume = 0.6;
+    if (musicOn) a.play().catch(() => setMusicOn(false));
+    else a.pause();
+  }, [musicOn]);
+
+  const togglePlay = () => {
+    const next = !playing;
+    setPlaying(next);
+    if (data.music_url) setMusicOn(next);
+  };
+
   const toggleFs = () => {
     if (document.fullscreenElement) document.exitFullscreen();
     else stageRef.current?.requestFullscreen?.();
@@ -95,7 +113,12 @@ export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
               {scene.area && scene.area !== room?.name ? <span className="text-paper/50"> · {scene.area}</span> : null}
             </p>
             <div className="flex shrink-0 gap-2">
-              <button onClick={() => setPlaying((p) => !p)} className={iconBtn} title={playing ? "Jeda" : "Putar tur"} data-testid="autoplay-toggle-btn">
+              {data.music_url && (
+                <button onClick={() => setMusicOn((m) => !m)} className={`${iconBtn} ${musicOn ? "text-brass" : ""}`} title={musicOn ? "Matikan musik" : "Putar musik"} data-testid="music-toggle-btn">
+                  {musicOn ? <Music2 size={15} /> : <VolumeX size={15} />}
+                </button>
+              )}
+              <button onClick={togglePlay} className={iconBtn} title={playing ? "Jeda" : "Putar tur"} data-testid="autoplay-toggle-btn">
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
               <button onClick={toggleFs} className={iconBtn} title="Layar penuh" data-testid="fullscreen-btn">
@@ -130,19 +153,20 @@ export function RuangStage({ data, maps, tour, index, setIndex }: Props) {
           {floor?.plan_url && (
             <div className="mt-auto hidden pt-10 md:block" data-testid="mini-plan">
               <p className="eyebrow mb-3 text-paper/45">{floor.name}</p>
-              <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact onSelect={goTo} />
+              <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact numbers={maps.number} onSelect={goTo} />
             </div>
           )}
         </aside>
       </div>
 
       <ThumbRail tour={tour} index={index} playing={playing} onSelect={(i) => setIndex(i)} />
+      {data.music_url && <audio ref={audioRef} src={img(data.music_url)} loop preload="none" data-testid="tour-music-audio" />}
 
       <Drawer open={sheet} onOpenChange={setSheet}>
         <DrawerContent className="max-h-[85vh] border-paper/10 bg-surface text-paper" data-testid="mobile-denah-sheet">
           <DrawerTitle className="eyebrow px-5 pt-4 text-brass">{floor?.name || "Denah"}</DrawerTitle>
           <div className="overflow-y-auto px-5 pb-10 pt-4">
-            {floor && <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact onSelect={(id) => { goTo(id); setSheet(false); }} />}
+            {floor && <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} numbers={maps.number} onSelect={(id) => { goTo(id); setSheet(false); }} />}
             <div className="mt-8">
               <AreaList rooms={floorRooms} scenes={floorScenes} maps={maps} activeId={scene.id} onSelect={(id) => { goTo(id); setSheet(false); }} />
             </div>

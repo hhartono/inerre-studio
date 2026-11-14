@@ -59,10 +59,17 @@ export interface Revision {
   scene_count?: number;
 }
 
+export interface PdfPage {
+  url: string;
+  aspect: number;
+}
+
 export interface ViewData {
   project: { id: string; name: string; code: string };
   mode: "draft" | "published";
   revision: Revision | null;
+  music_url: string | null;
+  pdf_pages: PdfPage[];
   floors: Floor[];
   rooms: Room[];
   scenes: Scene[];
@@ -80,6 +87,8 @@ export interface Project {
   updated_at: string;
   scene_count?: number;
   cover_url?: string | null;
+  music_name?: string | null;
+  pdf?: { name: string; pages: { file_id: string; aspect: number }[] } | null;
 }
 
 export interface Draft {
@@ -89,6 +98,8 @@ export interface Draft {
   scenes: Scene[];
   tour_order: string[];
   revisions: Revision[];
+  music_url: string | null;
+  pdf_pages: PdfPage[];
 }
 
 export interface Me {

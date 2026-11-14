@@ -3,15 +3,16 @@ import { ArrowLeft } from "lucide-react";
 import { pad } from "@/lib/api";
 import type { ViewData } from "@/types";
 
-export type ViewerTab = "ruang" | "denah" | "layout";
-const TABS: { id: ViewerTab; label: string }[] = [
+export type ViewerTab = "ruang" | "denah" | "pdf";
+const ALL_TABS: { id: ViewerTab; label: string }[] = [
   { id: "ruang", label: "Ruang" },
   { id: "denah", label: "Denah" },
-  { id: "layout", label: "Layout 3D" },
+  { id: "pdf", label: "Presentasi" },
 ];
 
 export function Masthead({ data, tab, setTab, backTo }: { data: ViewData; tab: ViewerTab; setTab: (t: ViewerTab) => void; backTo: string }) {
   const badge = data.mode === "draft" ? "Preview · Draft" : `Revisi ${pad(data.revision?.number || 0)}`;
+  const TABS = ALL_TABS.filter((t) => t.id !== "pdf" || data.pdf_pages?.length);
   return (
     <header className="sticky top-0 z-50 border-b border-paper/10 bg-ink/85 backdrop-blur-xl" data-testid="viewer-masthead">
       <div className="flex h-14 items-center gap-4 px-4 md:h-16 md:gap-8 md:px-8">
@@ -33,7 +34,7 @@ export function Masthead({ data, tab, setTab, backTo }: { data: ViewData; tab: V
           ))}
         </nav>
       </div>
-      <nav className="grid grid-cols-3 border-t border-paper/10 md:hidden">
+      <nav className="grid border-t border-paper/10 md:hidden" style={{ gridTemplateColumns: `repeat(${TABS.length}, minmax(0, 1fr))` }}>
         {TABS.map((t) => (
           <button key={t.id} onClick={() => setTab(t.id)} className={`eyebrow py-3 text-[9.5px] transition-colors ${tab === t.id ? "bg-surface text-brass" : "text-paper/55"}`} data-testid={`viewer-tab-mobile-${t.id}`}>
             {t.label}

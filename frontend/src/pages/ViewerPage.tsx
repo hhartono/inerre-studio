@@ -8,7 +8,7 @@ import { Splash } from "@/components/RequireRole";
 import { Masthead, ViewerTab } from "@/components/viewer/Masthead";
 import { RuangStage } from "@/components/viewer/RuangStage";
 import { DenahView } from "@/components/viewer/DenahView";
-import { Layout3DView } from "@/components/viewer/Layout3DView";
+import { PresentationView } from "@/components/viewer/PresentationView";
 
 const hashIndex = () => {
   const m = window.location.hash.match(/scene=(\d+)/);
@@ -79,7 +79,7 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
           <p className="eyebrow px-5 py-16 text-paper/45 md:px-10" data-testid="viewer-empty">Belum ada scene</p>
         ))}
       {tab === "denah" && <DenahView data={data} maps={maps} tour={tour} currentId={tour[index]?.id} onOpen={openScene} />}
-      {tab === "layout" && <Layout3DView data={data} />}
+      {tab === "pdf" && data.pdf_pages?.length > 0 && <PresentationView pages={data.pdf_pages} />}
     </div>
   );
 }

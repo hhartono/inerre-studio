@@ -14,7 +14,7 @@ function Landing() {
           <p className="eyebrow mb-6 text-brass">Presentation System</p>
           <h1 className="display text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">Walkthrough interior, disajikan ruang demi ruang.</h1>
           <p className="mt-6 max-w-md text-sm text-paper/65 md:text-base">
-            Masuk untuk menjelajah render, denah, dan layout 3D proyek Anda.
+            Masuk untuk menjelajah render, denah, dan presentasi proyek Anda.
           </p>
           <Link
             to="/sign-in"

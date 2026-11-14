@@ -6,6 +6,7 @@ import time
 from collections import OrderedDict
 
 import requests
+import pymupdf
 from PIL import Image, ImageOps
 
 Image.MAX_IMAGE_PIXELS = 200_000_000
@@ -73,6 +74,21 @@ def process_image(data: bytes) -> dict:
         copy.save(buf, "WEBP", quality=quality, method=4)
         out[name] = buf.getvalue()
     return out
+
+
+def render_pdf(data: bytes, width: int = 1800, max_pages: int = 80) -> list:
+    doc = pymupdf.open(stream=data, filetype="pdf")
+    if doc.page_count > max_pages:
+        raise ValueError(f"PDF maksimal {max_pages} halaman")
+    pages = []
+    for page in doc:
+        zoom = width / page.rect.width
+        pix = page.get_pixmap(matrix=pymupdf.Matrix(zoom, zoom), alpha=False)
+        img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        buf = io.BytesIO()
+        img.save(buf, "WEBP", quality=80, method=4)
+        pages.append({"data": buf.getvalue(), "aspect": round(pix.width / pix.height, 5)})
+    return pages
 
 
 def _sig(file_id: str, variant: str, exp: int) -> str:

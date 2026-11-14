@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import os
 import uuid
@@ -11,7 +12,7 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Response, UploadFile  # noqa: E402
+from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile  # noqa: E402
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from pymongo import ReturnDocument  # noqa: E402
@@ -402,13 +403,19 @@ async def delete_project(pid: str, _: dict = Depends(admin_only)):
     return {"ok": True}
 
 
+def media_urls(music_file_id, pdf) -> dict:
+    pages = (pdf or {}).get("pages") or []
+    return {"music_url": storage.signed_url(music_file_id, "audio"),
+            "pdf_pages": [{"url": storage.signed_url(pg["file_id"]), "aspect": pg["aspect"]} for pg in pages]}
+
+
 @api.get("/projects/{pid}/draft")
 async def get_draft(pid: str, member: dict = Depends(staff_only)):
     p = await get_project(pid, member)
     floors, rooms, scenes = await load_structure(pid)
     fl, sc = with_urls(floors, scenes)
     revisions = await db.revisions.find({"project_id": pid}, {"_id": 0, "snapshot": 0}).sort("number", -1).to_list(500)
-    return {"project": p, "floors": fl, "rooms": rooms, "scenes": sc,
+    return {"project": p, "floors": fl, "rooms": rooms, "scenes": sc, **media_urls(p.get("music_file_id"), p.get("pdf")),
             "tour_order": effective_tour(p.get("tour_order"), floors, rooms, scenes), "revisions": revisions}
 
 
@@ -420,6 +427,7 @@ async def view_project(pid: str, mode: str = "published", member: dict = Depends
             raise HTTPException(404, "Proyek tidak ditemukan")
         floors, rooms, scenes = await load_structure(pid)
         tour, revision = p.get("tour_order"), None
+        media = media_urls(p.get("music_file_id"), p.get("pdf"))
     else:
         rev = await db.revisions.find_one({"project_id": pid, "number": p.get("published_revision", 0)}, {"_id": 0})
         if not rev:
@@ -427,8 +435,9 @@ async def view_project(pid: str, mode: str = "published", member: dict = Depends
         snap = rev["snapshot"]
         floors, rooms, scenes, tour = snap["floors"], snap["rooms"], snap["scenes"], snap["tour_order"]
         revision = {"number": rev["number"], "published_at": rev["published_at"]}
+        media = media_urls(snap.get("music_file_id"), snap.get("pdf"))
     fl, sc = with_urls(floors, scenes)
-    return {"project": {"id": p["id"], "name": p["name"], "code": p.get("code", "")}, "mode": mode, "revision": revision,
+    return {"project": {"id": p["id"], "name": p["name"], "code": p.get("code", "")}, "mode": mode, "revision": revision, **media,
             "floors": fl, "rooms": rooms, "scenes": sc, "tour_order": effective_tour(tour, floors, rooms, scenes)}
 
 
@@ -456,10 +465,83 @@ async def publish_project(pid: str, member: dict = Depends(staff_only)):
     rev = {"id": new_id(), "project_id": pid, "number": number, "published_at": now_iso(),
            "published_by": member.get("email") or member["user_id"], "scene_count": len(scenes),
            "snapshot": {"floors": floors, "rooms": rooms, "scenes": scenes,
+                        "music_file_id": p.get("music_file_id"), "pdf": p.get("pdf"),
                         "tour_order": effective_tour(p.get("tour_order"), floors, rooms, scenes)}}
     await db.revisions.insert_one({**rev})
     await db.projects.update_one({"id": pid}, {"$set": {"published_revision": number, "published_at": rev["published_at"]}})
     return {"number": number, "published_at": rev["published_at"]}
+
+
+async def _put_file(project_id: str, kind: str, path: str, data: bytes, mime: str, variant: str, **extra) -> dict:
+    try:
+        res = await run_in_threadpool(storage.put_object, path, data, mime)
+    except requests.RequestException as e:
+        logger.error(f"Storage upload failed: {e}")
+        raise HTTPException(502, "Penyimpanan file sedang bermasalah. Coba unggah lagi.")
+    doc = {"id": extra.pop("file_id", None) or new_id(), "project_id": project_id,
+           "kind": kind, "content_type": mime, "paths": {variant: res["path"]}, "is_deleted": False, "created_at": now_iso(), **extra}
+    await db.files.insert_one({**doc})
+    return doc
+
+
+@api.post("/projects/{pid}/music")
+async def upload_music(pid: str, file: UploadFile = File(...), member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    ct = file.content_type or ""
+    data = await file.read()
+    if not ct.startswith("audio/"):
+        raise HTTPException(400, "File harus berupa audio (mp3, m4a, wav)")
+    if not data or len(data) > 30 * 1024 * 1024:
+        raise HTTPException(413, "File audio maksimal 30 MB")
+    fid = new_id()
+    ext = (file.filename or "a.mp3").rsplit(".", 1)[-1].lower()[:5]
+    doc = await _put_file(pid, "music", f"{storage.APP_NAME}/projects/{pid}/{fid}/audio.{ext}", data, ct, "audio",
+                          file_id=fid, original_filename=file.filename)
+    await db.projects.update_one({"id": pid}, {"$set": {"music_file_id": doc["id"], "music_name": file.filename, "updated_at": now_iso()}})
+    return await get_doc("projects", pid)
+
+
+@api.delete("/projects/{pid}/music")
+async def delete_music(pid: str, member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    await db.projects.update_one({"id": pid}, {"$set": {"music_file_id": None, "music_name": None, "updated_at": now_iso()}})
+    return await get_doc("projects", pid)
+
+
+@api.post("/projects/{pid}/pdf")
+async def upload_pdf(pid: str, file: UploadFile = File(...), member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    data = await file.read()
+    if not data.startswith(b"%PDF"):
+        raise HTTPException(400, "File harus berupa PDF")
+    if len(data) > 80 * 1024 * 1024:
+        raise HTTPException(413, "PDF maksimal 80 MB")
+    try:
+        rendered = await run_in_threadpool(storage.render_pdf, data)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except Exception:  # noqa: BLE001
+        raise HTTPException(400, "PDF tidak bisa dibaca")
+    base = f"{storage.APP_NAME}/projects/{pid}/{new_id()}"
+    await _put_file(pid, "pdf", f"{base}/original.pdf", data, "application/pdf", "original", original_filename=file.filename)
+    sem = asyncio.Semaphore(6)
+
+    async def put_page(i: int, pg: dict) -> dict:
+        async with sem:
+            doc = await _put_file(pid, "pdf_page", f"{base}/page-{i + 1:03d}.webp", pg["data"], "image/webp", "web", aspect=pg["aspect"])
+        return {"file_id": doc["id"], "aspect": pg["aspect"]}
+
+    pages = await asyncio.gather(*(put_page(i, pg) for i, pg in enumerate(rendered)))
+    pdf = {"name": file.filename, "pages": list(pages), "uploaded_at": now_iso()}
+    await db.projects.update_one({"id": pid}, {"$set": {"pdf": pdf, "updated_at": now_iso()}})
+    return await get_doc("projects", pid)
+
+
+@api.delete("/projects/{pid}/pdf")
+async def delete_pdf(pid: str, member: dict = Depends(staff_only)):
+    await get_project(pid, member)
+    await db.projects.update_one({"id": pid}, {"$set": {"pdf": None, "updated_at": now_iso()}})
+    return await get_doc("projects", pid)
 
 
 # ---------- floors ----------
@@ -626,14 +708,28 @@ async def delete_scene(sid: str, member: dict = Depends(staff_only)):
 
 # ---------- images (signed) ----------
 @api.get("/img/{fid}/{variant}")
-async def serve_image(fid: str, variant: str, e: int = Query(...), s: str = Query(...)):
-    if variant not in ("web", "thumb") or not storage.verify(fid, variant, e, s):
-        raise HTTPException(403, "Link gambar tidak valid atau kedaluwarsa")
-    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0, "paths": 1})
-    if not rec:
-        raise HTTPException(404, "Gambar tidak ditemukan")
+async def serve_image(fid: str, variant: str, request: Request, e: int = Query(...), s: str = Query(...)):
+    if variant not in ("web", "thumb", "audio") or not storage.verify(fid, variant, e, s):
+        raise HTTPException(403, "Link tidak valid atau kedaluwarsa")
+    rec = await db.files.find_one({"id": fid, "is_deleted": False}, {"_id": 0, "paths": 1, "content_type": 1})
+    if not rec or variant not in rec["paths"]:
+        raise HTTPException(404, "File tidak ditemukan")
     data = await run_in_threadpool(storage.get_object, rec["paths"][variant])
-    return Response(content=data, media_type="image/webp", headers={"Cache-Control": "private, max-age=3600"})
+    headers = {"Cache-Control": "private, max-age=3600", "Accept-Ranges": "bytes"}
+    if variant != "audio":
+        return Response(content=data, media_type="image/webp", headers=headers)
+    mime = rec.get("content_type") or "audio/mpeg"
+    rng = request.headers.get("range", "")
+    if rng.startswith("bytes="):
+        start_s, _, end_s = rng[6:].split(",")[0].partition("-")
+        size = len(data)
+        start = int(start_s) if start_s else max(0, size - int(end_s or 0))
+        end = min(int(end_s), size - 1) if start_s and end_s else size - 1
+        if start >= size:
+            return Response(status_code=416, headers={"Content-Range": f"bytes */{size}"})
+        headers["Content-Range"] = f"bytes {start}-{end}/{size}"
+        return Response(content=data[start:end + 1], status_code=206, media_type=mime, headers=headers)
+    return Response(content=data, media_type=mime, headers=headers)
 
 
 @api.get("/")
