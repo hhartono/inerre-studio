@@ -30,7 +30,8 @@ export function ScenePanel({ scene }: { scene: Scene }) {
   const set = (k: string) => (e: any) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const saveInfo = async () => {
     try {
-      const { data: s } = await api.patch(`/scenes/${scene.id}`, form);
+      const changed = Object.fromEntries(Object.entries(form).filter(([k, v]) => v !== (scene as any)[k]));
+      const { data: s } = await api.patch(`/scenes/${scene.id}`, changed);
       replaceScene(s);
       toast.success("Scene disimpan");
       if (s.room_id !== scene.room_id) reload();

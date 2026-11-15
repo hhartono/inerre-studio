@@ -192,7 +192,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               showRail();
             }}
             onTouchEnd={(e) => e.stopPropagation()}
-            onScroll={showRail}
+            onScrollCapture={showRail}
             data-testid="thumb-rail-overlay-wrap"
             data-shown={railShown ? "true" : "false"}
           >
@@ -211,10 +211,10 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               <span className="block h-1 w-10 rounded-full bg-white/45" />
             </button>
           )}
-          <button onClick={(e) => { e.stopPropagation(); setSheet(true); }} className="glass eyebrow absolute bottom-3 right-3 z-20 hidden items-center gap-2 px-4 py-2.5 text-paper short:inline-flex" data-testid="landscape-denah-btn">
+          <button onClick={(e) => { e.stopPropagation(); setSheet(true); }} className={`glass eyebrow absolute bottom-3 right-3 z-20 hidden items-center gap-2 px-4 py-2.5 text-paper transition-opacity short:inline-flex ${railShown ? "pointer-events-none opacity-0" : "opacity-100"}`} data-testid="landscape-denah-btn">
             <MapIcon size={13} /> Denah
           </button>
-          <div key={`o-${scene.id}`} className="glass absolute bottom-3 left-3 z-20 hidden max-w-[45%] px-3 py-2 short:block fade-up" data-testid="landscape-story-overlay">
+          <div key={`o-${scene.id}`} className={`glass absolute bottom-3 left-3 z-20 hidden max-w-[45%] px-3 py-2 transition-opacity short:block ${railShown ? "pointer-events-none opacity-0" : "opacity-100"}`} data-testid="landscape-story-overlay">
             <p className="eyebrow text-[9px] text-brass">{pad(index + 1)} / {pad(tour.length)}</p>
             <p className="truncate text-sm">{scene.title || "Tanpa judul"}</p>
             {musicOn && data.music_title && <p className="truncate text-[9px] text-paper/50" data-testid="music-credit-landscape">♪ {data.music_title}</p>}

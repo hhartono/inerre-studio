@@ -842,8 +842,13 @@ async def create_scene(rid: str, file: UploadFile = File(...), member: dict = De
            "hotspots": [], "camera": None, "hotspots_need_check": False, "created_at": now_iso()}
     await db.scenes.insert_one({**doc})
     await db.projects.update_one({"id": r["project_id"]}, {"$push": {"tour_order": doc["id"]}, "$set": {"updated_at": now_iso()}})
-    asyncio.create_task(auto_describe(doc["id"]))
+    task = asyncio.create_task(auto_describe(doc["id"]))
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
     return with_urls([], [doc])[1][0]
+
+
+_bg_tasks: set = set()
 
 
 async def write_description(scene: dict) -> str:
@@ -904,6 +909,8 @@ async def update_scene(sid: str, body: SceneUpdate, member: dict = Depends(staff
         if room["project_id"] != s["project_id"]:
             raise HTTPException(400, "Ruangan tidak valid")
         data["floor_id"] = room["floor_id"]
+    if "description" in data and data["description"] != s.get("description"):
+        data["description_ai"] = False
     await db.scenes.update_one({"id": sid}, {"$set": data})
     await touch(s["project_id"])
     return with_urls([], [await get_doc("scenes", sid)])[1][0]

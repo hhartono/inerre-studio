@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 13: tested AI scene descriptions (backend + Studio UI) and the mobile/landscape/desktop thumbnail overlay. Backend: test_ai_describe.py passed 6/6 using a real interior photo. Uploading a scene fills an empty description in the background in under 10s with 38 words of Indonesian in one paragraph and sets description_ai=true. POST /scenes/{sid}/describe returns 200 for staff, 403 for client, 401 without a token and 404 for an unknown id, and it does not save. A PATCH description persists. Studio UI: the button label changes correctly ('Tulis ulang dengan AI' / 'Buat dengan AI' / 'Menulis…' and disabled while busy), the field fills, the 'Klik Simpan' toast appears, and the saved text survives a reload. Mobile 390x844 and 375x667: no bottom thumb-rail; the overlay is shown on load and hides after 3.5s; the handle shows the overlay again; tapping the stage toggles it; othumb-N navigates; a scene change re-shows it; prev/next do not toggle it (they re-show it only because the scene changes); the topline play button does not toggle it. A swipe on the overlay does not navigate, while a swipe on the stage does. There is no page scroll; at 375x667 the story panel scrolls inside itself. Landscape 844x390: the overlay works and auto-hides. Desktop 1920x800: the bottom thumb-rail is visible, with no overlay or handle. The sample project (Revisi 05, AI descriptions) was only read. 3 LLM calls in total plus 2 auto-describes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/scenes/{sid}", "issue": "description_ai stays true after a person edits and saves the description, so the Studio note 'Deskripsi awal dibuat otomatis oleh AI' keeps showing on text the designer wrote. Reproduced with test_05 (prints True) and in the UI (note still visible after save and reload). Fix: set description_ai=false when description is in the PATCH and differs from the stored value. Alternatively keep it true only when the PATCH saves exactly the AI text."},
+      {"endpoint": "create_scene -> asyncio.create_task(auto_describe)", "issue": "No reference to the task is kept, so it could be garbage-collected mid-run (Python docs warning). Keep the tasks in a module-level set."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Studio ScenePanel after uploading a new render", "issue": "The editor never re-fetches the draft, so the AI default description is filled in the DB ~5-10s after upload but the panel still shows an empty description until a full reload. Worse, saving the title or area in that window sends description:'' from the stale form, which overwrites the AI text in the DB (the conditional update in auto_describe only stops the AI from overwriting; nothing stops the user from overwriting it). Found by code review: there is no polling or reload anywhere; not reproduced via a UI upload. Fix: poll the draft or scene a few times after upload until description is set or description_ai is true. Also send only changed fields in the PATCH, or skip description when it is unchanged and empty.", "selector": "[data-testid=scene-description-input]", "priority": "MEDIUM"},
+      {"component": "Landscape 844x390 viewer", "issue": "While the overlay rail is shown (first 3.5s after each scene change), the full-width wrap (z-30) covers landscape-denah-btn and landscape-story-overlay. elementFromPoint at the Denah button center returns thumb-rail-overlay, so Denah cannot be tapped and the story caption shows through the thumbs. Fix: hide the story overlay and Denah button while railShown, or lift them above the rail, or limit the rail width in landscape.", "selector": "[data-testid=landscape-denah-btn]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile 375x667 viewer", "issues": ["The mini-plan sits below the fold inside the internally scrolling story panel (scrollHeight 456 vs clientHeight 295). This is acceptable, but the user only sees the 'LANTAI 1 / PERBESAR' header.", "The hotspot label 'KE DAPUR' is clipped at the right edge and overlaps next-scene-btn."]},
+      {"screen": "Mobile overlay rail", "issue_note": "", "issues": ["The onScroll on thumb-rail-overlay-wrap never fires because the scroll happens on the inner ThumbRail div and React onScroll does not bubble. Only touchstart resets the timer, so a long drag of more than 3.5s can hide the rail (pointer-events-none) mid-scroll. Move onScroll to the ThumbRail element or use onScrollCapture."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_describe.py", "/app/backend/tests/setup_ai_ui.py", "/app/test_reports/pytest/pytest_ai.xml"],
+  "action_items": [
+    "Studio: after a scene upload, poll or reload the scene until the AI description arrives. Avoid sending a stale empty description in PATCH so it cannot wipe the AI default.",
+    "Backend PATCH /scenes/{sid}: reset description_ai=false when a person changes the description.",
+    "Landscape: stop the overlay rail covering the Denah button and the story caption (hide them while railShown, or change the z-order).",
+    "Move the rail's onScroll handler to the actual scrolling element (or use onScrollCapture) so scrolling keeps the overlay visible.",
+    "Keep references to the background auto_describe tasks."
+  ],
+  "critical_code_review_comments": [
+    "ScenePanel saveInfo PATCHes the whole form, including the description, so stale state overwrites concurrent server-side changes.",
+    "description_ai is never cleared.",
+    "RuangStage onScroll on the wrapper is dead code (scroll events do not bubble).",
+    "Existing test_inerre_api.py uploads solid-color JPEGs, and every upload now triggers an LLM call on a blank image. Consider an env flag to skip auto_describe in tests, or accept the cost."
+  ],
+  "updated_files": ["/app/backend/tests/test_ai_describe.py", "/app/backend/tests/setup_ai_ui.py"],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "~90% (all requested behaviours pass; 1 medium + 1 low issue)"},
+  "seed_data_creation": "Created and deleted TEST_AI Describe and TEST_AI UI (42b65daddae143cc9410764ca3c83f26), both removed. Sample project only read.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Clerk tickets are single-use and the session does not persist between browser_automation calls, so mint a new ticket per call (python ticket.py client). A storage_state copied into a new has_touch context works for touch tests. Swipe tests use synthetic TouchEvent dispatch. Run test_ai_describe.py with -p no:xdist -o addopts=\"\"; it uses /app/frontend/public/hero-interior.jpg as the real photo. setup_ai_ui.py creates a TEST project and scene (and deletes with --delete PID)."
+}

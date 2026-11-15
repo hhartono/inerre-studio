@@ -34,8 +34,9 @@ export function StructureTree() {
       });
     }
     setBusy((b) => ({ ...b, [rid]: "" }));
-    if (files.length - failed) toast.success(`${files.length - failed} render diunggah`);
+    if (files.length - failed) toast.success(`${files.length - failed} render diunggah. Deskripsi AI sedang dibuat…`);
     await reload();
+    if (files.length - failed) [12000, 30000].forEach((ms) => setTimeout(() => reload(), ms));
   };
 
   return (
