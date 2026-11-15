@@ -1,0 +1,18 @@
+{
+  "summary": "Final backend-only retest of share-link _client_ip after the iteration_11 CF-range note. The code now skips at most one Cloudflare hop from the right (IPv4 and IPv6 _CF_NETS). Private, loopback, invalid, Google LB and TRUSTED_PROXY_IPS entries are still always skipped. I added TestCfRangeClient (4 tests) to test_share_ratelimit.py. It covers a WARP client at 104.28.33.7 with rotating left-side spoofs, varying CF egress, extra GFE hops, junk and private entries. It also covers a second WARP user behind the same egress (not locked out), IPv6 CF client and egress, and a chain with two CF entries where only one is skipped. Results: test_share_ratelimit.py 22/22 passed, including all earlier classes such as TestPublicMalformedXffBypass. test_share.py 16/16 passed. Backend was restarted before each run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_share_ratelimit.py", "/app/backend/tests/test_share.py", "/app/test_reports/pytest/iter12_ratelimit.xml", "/app/test_reports/pytest/iter12_share.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "_client_ip logic is correct: walking from the right, the first CF entry is the egress and the next valid public entry is the real client, even when that client is in a CF range. Anything further left (set by the client) is never reached.",
+    "Accepted trade-off: requests that come direct to the Google LB without Cloudflare, with a client in a CF range, have that client IP skipped as the 'egress'. The per-token cap of 20 per 15 min still applies, so the risk is low.",
+    "_CF_NETS is hardcoded. Cloudflare ranges change rarely, but they need a manual refresh from cloudflare.com/ips when they do."
+  ],
+  "updated_files": ["/app/backend/tests/test_share_ratelimit.py"],
+  "success_rate": {"backend": "100% (38/38)", "frontend": "not tested (backend only)"},
+  "seed_data_creation": "None. Each test class created a TEST_T1 project and deleted it by id in test_99_cleanup (all returned 200).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Rate-limit state is in memory, so restart the backend before each run. Run with -p no:xdist -o addopts=\"\" so the class-ordered tests run in sequence. Test IPs must be public: doc ranges and 10/8 count as private and are skipped. LB 34.8.246.104 is trusted through TRUSTED_PROXY_IPS."
+}

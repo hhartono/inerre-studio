@@ -26,6 +26,20 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   const [playing, setPlaying] = useState(false);
   const [sheet, setSheet] = useState(false);
   const [wake, setWake] = useState(false);
+  const [railShown, setRailShown] = useState(true);
+  const railTimer = useRef<ReturnType<typeof setTimeout>>();
+  const showRail = useCallback(() => {
+    setRailShown(true);
+    clearTimeout(railTimer.current);
+    railTimer.current = setTimeout(() => setRailShown(false), 3500);
+  }, []);
+
+  useEffect(() => {
+    showRail();
+    return () => {
+      clearTimeout(railTimer.current);
+    };
+  }, [index, showRail]);
   const stageRef = useRef<HTMLDivElement>(null);
   const touchX = useRef<number | null>(null);
   const valid = useMemo(() => new Set(tour.map((s) => s.id)), [tour]);
@@ -132,11 +146,12 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
             if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
             touchX.current = null;
           }}
+          onClick={() => (railShown ? setRailShown(false) : showRail())}
           data-testid="ruang-stage"
         >
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />
           <div className="absolute inset-0 bg-ink/35" />
-          <div className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-2 md:items-start md:gap-4 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
+          <div onClick={(e) => e.stopPropagation()} className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-2 md:items-start md:gap-4 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
             <p className="eyebrow min-w-0 truncate text-[9.5px] tracking-[0.2em] text-paper/80 md:text-[10.5px] md:tracking-[0.28em]">
               <span className="hidden sm:inline">{floor?.name} <span className="text-brass">/</span> </span>{room?.name}
               {scene.area && scene.area !== room?.name ? <span className="text-paper/50"> · {scene.area}</span> : null}
@@ -163,13 +178,40 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               <StageImage scene={scene} valid={valid} onGo={goTo} />
             </div>
           </div>
-          <button onClick={() => go(-1)} className={`${iconBtn} absolute left-2 top-1/2 z-20 -translate-y-1/2 md:left-6 md:h-12 md:w-12`} data-testid="prev-scene-btn">
+          <button onClick={(e) => { e.stopPropagation(); go(-1); }} className={`${iconBtn} absolute left-2 top-1/2 z-20 -translate-y-1/2 md:left-6 md:h-12 md:w-12`} data-testid="prev-scene-btn">
             <ChevronLeft size={18} />
           </button>
-          <button onClick={() => go(1)} className={`${iconBtn} absolute right-2 top-1/2 z-20 -translate-y-1/2 md:right-6 md:h-12 md:w-12`} data-testid="next-scene-btn">
+          <button onClick={(e) => { e.stopPropagation(); go(1); }} className={`${iconBtn} absolute right-2 top-1/2 z-20 -translate-y-1/2 md:right-6 md:h-12 md:w-12`} data-testid="next-scene-btn">
             <ChevronRight size={18} />
           </button>
-          <button onClick={() => setSheet(true)} className="glass eyebrow absolute bottom-3 right-3 z-20 hidden items-center gap-2 px-4 py-2.5 text-paper short:inline-flex" data-testid="landscape-denah-btn">
+          <div
+            className={`absolute inset-x-0 bottom-0 z-30 transition-[opacity,transform] duration-300 md:hidden short:block ${railShown ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-3 opacity-0"}`}
+            onClick={(e) => e.stopPropagation()}
+            onTouchStart={(e) => {
+              e.stopPropagation();
+              showRail();
+            }}
+            onTouchEnd={(e) => e.stopPropagation()}
+            onScroll={showRail}
+            data-testid="thumb-rail-overlay-wrap"
+            data-shown={railShown ? "true" : "false"}
+          >
+            <ThumbRail tour={tour} index={index} playing={playing} onSelect={(i) => setIndex(i)} overlay />
+          </div>
+          {!railShown && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                showRail();
+              }}
+              className="absolute bottom-1 left-1/2 z-30 -translate-x-1/2 px-6 py-2 md:hidden short:block"
+              aria-label="Tampilkan semua scene"
+              data-testid="show-rail-handle"
+            >
+              <span className="block h-1 w-10 rounded-full bg-white/45" />
+            </button>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); setSheet(true); }} className="glass eyebrow absolute bottom-3 right-3 z-20 hidden items-center gap-2 px-4 py-2.5 text-paper short:inline-flex" data-testid="landscape-denah-btn">
             <MapIcon size={13} /> Denah
           </button>
           <div key={`o-${scene.id}`} className="glass absolute bottom-3 left-3 z-20 hidden max-w-[45%] px-3 py-2 short:block fade-up" data-testid="landscape-story-overlay">

@@ -1,5 +1,5 @@
 # INERRE iteration_11: share unlock rate limit — client IP = _client_ip(): walk XFF from the right, skip invalid/private/loopback/
-# Cloudflare/Google-LB/TRUSTED_PROXY_IPS entries, first untrusted valid IP wins (else client.host). Spoofed/malformed XFF
+# Google-LB/TRUSTED_PROXY_IPS entries and at most ONE Cloudflare hop (iteration_12), first untrusted valid IP wins (else client.host). Spoofed/malformed XFF
 # does not bypass; a different real client is not locked out by guest A; per-token cap 20/15min across IPs.
 # NOTE: test IPs must be PUBLIC (doc ranges 203.0.113/198.51.100/192.0.2 and 10/8 are is_private -> skipped).
 # NOTE: rate-limit state is in-memory; restart backend for a clean slate. Each class uses its own TEST_ project/token.
@@ -151,6 +151,46 @@ class TestPerTokenCap:
         assert unlock(tok, "bad", chain("45.99.0.1"), INTERNAL).status_code == 429
         assert unlock(tok, "TEST1234", chain("45.99.0.2"), INTERNAL).status_code == 429
         assert unlock(tok, "TEST1234").status_code == 429  # public path too
+
+    def test_99_cleanup(self, admin):
+        assert admin.delete(f"/api/projects/{self.state['pid']}").status_code == 200
+
+
+# iteration_12: real client whose own IP is in Cloudflare ranges (e.g. WARP 104.28.x.x) — only ONE CF hop is skipped
+class TestCfRangeClient:
+    state = {}
+
+    def test_01_setup(self, designer):
+        self.state["pid"], self.state["tok"] = _mk_project(designer, "TEST_T1 RL CF Client")
+
+    def test_02_warp_client_keyed_and_spoof_blocked(self):
+        tok = self.state["tok"]
+        w = "104.28.33.7"  # in 104.24.0.0/14
+        codes = [unlock(tok, "bad", chain(w, spoof=f"6.6.7.{i}"), INTERNAL).status_code for i in range(5)]
+        assert codes == [401] * 5, codes
+        for x in (chain(w), chain(w, spoof="8.8.4.4"), f"1.1.1.1, 2.2.2.2, {w}, 104.22.9.9, {LB}",
+                  f"x, {w}, 172.70.5.5, {LB}, 35.191.126.58", f"9.9.9.9, {w}, junk, 10.1.2.3, {CF}, {LB}, 130.211.0.5"):
+            assert unlock(tok, "TEST1234", x, INTERNAL).status_code == 429, x
+        # another WARP user behind the same CF egress is NOT locked
+        assert unlock(tok, "TEST1234", chain("104.28.33.8"), INTERNAL).status_code == 200
+
+    def test_03_ipv6_cf_client(self):
+        tok = self.state["tok"]
+        c6, cf6 = "2606:4700:110:8a1::1", "2a06:98c0:3600::103"
+        codes = [unlock(tok, "bad", f"5.5.{i}.5, {c6}, {cf6}, {LB}", INTERNAL).status_code for i in range(5)]
+        assert codes == [401] * 5, codes
+        assert unlock(tok, "TEST1234", f"7.7.7.7, {c6}, {cf6}, {LB}", INTERNAL).status_code == 429
+        # IPv6 CF client behind IPv4 CF egress -> same key
+        assert unlock(tok, "TEST1234", f"{c6}, {CF}, {LB}", INTERNAL).status_code == 429
+        assert unlock(tok, "TEST1234", f"2606:4700:110:8a1::2, {cf6}, {LB}", INTERNAL).status_code == 200
+
+    def test_04_two_cf_entries_only_one_skipped(self):
+        tok = self.state["tok"]
+        # chain "<spoof>, CF-a, CF-b, LB": CF-b skipped, CF-a is the key -> rotating left spoof never reached
+        a = "162.158.10.10"
+        codes = [unlock(tok, "bad", f"3.3.3.{i}, {a}, {CF}, {LB}", INTERNAL).status_code for i in range(5)]
+        assert codes == [401] * 5, codes
+        assert unlock(tok, "TEST1234", f"4.4.4.4, {a}, {CF}, {LB}", INTERNAL).status_code == 429
 
     def test_99_cleanup(self, admin):
         assert admin.delete(f"/api/projects/{self.state['pid']}").status_code == 200

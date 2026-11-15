@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api, errMsg } from "@/lib/api";
 import { useEditor } from "@/components/editor/EditorContext";
@@ -11,6 +11,18 @@ export function ScenePanel({ scene }: { scene: Scene }) {
   const { data, replaceScene, reload, select } = useEditor();
   const [form, setForm] = useState({ title: scene.title, area: scene.area, description: scene.description, room_id: scene.room_id });
   const [busy, setBusy] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const generate = async () => {
+    setAiBusy(true);
+    try {
+      const { data: r } = await api.post(`/scenes/${scene.id}/describe`, {}, { timeout: 120000 });
+      setForm((f) => ({ ...f, description: r.description }));
+      toast.success("Deskripsi dibuat. Klik Simpan untuk menyimpan.");
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
+    setAiBusy(false);
+  };
   useEffect(() => {
     setForm({ title: scene.title, area: scene.area, description: scene.description, room_id: scene.room_id });
   }, [scene.id, scene.title, scene.area, scene.description, scene.room_id]);
@@ -81,8 +93,14 @@ export function ScenePanel({ scene }: { scene: Scene }) {
             <input className={inputCls} value={form.area} onChange={set("area")} data-testid="scene-area-input" />
           </div>
           <div className="sm:col-span-2">
-            <Label>Deskripsi</Label>
+            <div className="flex items-center justify-between gap-3">
+              <Label>Deskripsi</Label>
+              <button onClick={generate} disabled={!!aiBusy} className="eyebrow mb-2.5 inline-flex items-center gap-2 text-[9.5px] text-brass transition-opacity hover:opacity-80 disabled:opacity-50" data-testid="scene-generate-description-btn">
+                <Sparkles size={12} /> {aiBusy ? "Menulis…" : form.description ? "Tulis ulang dengan AI" : "Buat dengan AI"}
+              </button>
+            </div>
             <textarea rows={5} className={inputCls} value={form.description} onChange={set("description")} data-testid="scene-description-input" />
+            {scene.description_ai && form.description === scene.description && <p className="mt-2 text-xs text-paper/40" data-testid="scene-description-ai-note">Deskripsi awal dibuat otomatis oleh AI. Silakan sunting.</p>}
           </div>
           <div>
             <Label>Ruangan</Label>

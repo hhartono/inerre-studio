@@ -29,6 +29,7 @@ export interface Scene {
   hotspots: Hotspot[];
   camera: Camera | null;
   hotspots_need_check: boolean;
+  description_ai?: boolean;
   image_url: string;
   thumb_url: string;
 }

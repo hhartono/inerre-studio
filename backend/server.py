@@ -1,4 +1,5 @@
 import asyncio
+import base64
 import ipaddress
 import logging
 import secrets
@@ -841,7 +842,54 @@ async def create_scene(rid: str, file: UploadFile = File(...), member: dict = De
            "hotspots": [], "camera": None, "hotspots_need_check": False, "created_at": now_iso()}
     await db.scenes.insert_one({**doc})
     await db.projects.update_one({"id": r["project_id"]}, {"$push": {"tour_order": doc["id"]}, "$set": {"updated_at": now_iso()}})
+    asyncio.create_task(auto_describe(doc["id"]))
     return with_urls([], [doc])[1][0]
+
+
+async def write_description(scene: dict) -> str:
+    from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
+    f = await db.files.find_one({"id": scene["image_file_id"]}, {"_id": 0, "paths": 1})
+    data = await run_in_threadpool(storage.get_object, f["paths"]["thumb"])
+    room = await db.rooms.find_one({"id": scene["room_id"]}, {"_id": 0, "name": 1}) or {}
+    chat = LlmChat(
+        api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"describe-{scene['id']}-{new_id()}",
+        system_message="Anda copywriter studio desain interior INERRE. Tulis caption presentasi yang elegan, konkret, dan tidak berlebihan.",
+    ).with_model("openai", "gpt-5.4")
+    title = f' berjudul "{scene["title"]}"' if scene.get("title") else ""
+    prompt = (f"Tulis deskripsi 2-3 kalimat dalam Bahasa Indonesia untuk render ruang \"{room.get('name', '')}\"{title}. "
+              "Satu paragraf, maksimal 45 kata. Sebut material, warna, pencahayaan, dan suasana yang terlihat. Tanpa judul, tanpa emoji, tanpa tanda kutip.")
+    out = []
+    msg = UserMessage(text=prompt, file_contents=[ImageContent(image_base64=base64.b64encode(data).decode())])
+    async for ev in chat.stream_message(msg):
+        if isinstance(ev, TextDelta):
+            out.append(ev.content)
+        elif isinstance(ev, StreamDone):
+            break
+    return "".join(out).strip()
+
+
+async def auto_describe(sid: str):
+    try:
+        scene = await db.scenes.find_one({"id": sid}, {"_id": 0})
+        if not scene or scene.get("description"):
+            return
+        text = await write_description(scene)
+        if text:
+            await db.scenes.update_one({"id": sid, "description": ""}, {"$set": {"description": text, "description_ai": True}})
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Auto description failed for {sid}: {e}")
+
+
+@api.post("/scenes/{sid}/describe")
+async def describe_scene(sid: str, member: dict = Depends(staff_only)):
+    s = await get_doc("scenes", sid)
+    await get_project(s["project_id"], member)
+    try:
+        text = await write_description(s)
+    except Exception as e:  # noqa: BLE001
+        logger.error(f"Description failed: {e}")
+        raise HTTPException(502, "AI sedang tidak tersedia. Coba lagi sebentar.")
+    return {"description": text}
 
 
 @api.patch("/scenes/{sid}")
