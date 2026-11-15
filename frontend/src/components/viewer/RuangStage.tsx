@@ -124,7 +124,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
         <div
           ref={stageRef}
           className="relative h-[var(--stage-h)] shrink-0 overflow-hidden bg-ink transition-[height] duration-500 md:h-auto md:flex-1 short:h-auto short:flex-1"
-          style={{ "--stage-h": `min(62vh, calc((100vw - 16px) / ${scene.aspect || 1.5} + 52px))` } as React.CSSProperties}
+          style={{ "--stage-h": `min(62vh, max(48vh, calc(100vh - 360px)), calc((100vw - 16px) / ${scene.aspect || 1.5} + 52px))` } as React.CSSProperties}
           onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
           onTouchEnd={(e) => {
             if (touchX.current === null) return;

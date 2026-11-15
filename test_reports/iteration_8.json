@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 8: tested the guest share link (backend and UI), the share settings in Studio, and the mobile story panel layout. Backend: new test_share.py has 18/18 passing, and the full regression run has 85 passed and 1 skipped. Confirmed: staff GET/PUT share, enabling without a password returns 400, a password shorter than 4 characters returns 422, the password is stored as a bcrypt hash and never returned, changing the password invalidates old access, regenerate makes the old link return 404, client gets 403 and unauthenticated gets 401, no 'share' field leaks from list/draft/PATCH/client view, meta returns 404 when unpublished, invalid token, or disabled, a wrong password returns 401 'Password salah', 5 wrong attempts then return 429, the access JWT is HS256 with a 12h lifetime, guest view matches the client view, signed image URLs and music load, and forged/garbage/missing access returns 401. Guest UI: invalid token shows share-error; the unlock page shows a wrong-password error; the correct password opens the viewer with no back link; access is remembered after reload; deep link #scene=02 works; after a staff password change in Studio the unlock form shows again; the old link shows share-error after regenerate. Studio UI: switch disabled until a password exists, save requires at least 4 characters, the link box shows origin/s/<token>, copy, toggle off and regenerate (confirm) work. Mobile 390x844 and 375x667: no page scroll (docH == vh), story panel sits between the stage and the thumb rail and scrolls internally, description 15px/28px, mini-plan at 62% width (217px/208px), Perbesar opens the Denah sheet, and mini-plan pins navigate. Desktop 1920x800 (380px aside, mini-plan full width) and landscape 844x390 (aside hidden, overlay and Denah button, Denah locked) are unchanged. Found one security issue: a spoofed X-Forwarded-For header bypasses the rate limit.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/share/{token}/unlock", "issue": "SECURITY: the rate-limit key uses the FIRST X-Forwarded-For value, and the client controls that value. Reproduced (probe_xff.py): after 5 wrong attempts the request without the header gets 429, but sending 'X-Forwarded-For: 1.2.3.x' gives 401 again with unlimited retries, and a correct password with a spoofed XFF returns 200. With passwords as short as 4 characters, anyone can brute-force the link. Fix: use the right-most XFF entry (the one added by the trusted ingress) or request.client.host, and also add a per-token cap that ignores the IP (e.g. 20 failures per 15 min per token).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "rate limit store", "issue": "_share_attempts is an in-memory dict that is never pruned (it grows with every token and IP) and resets when the backend restarts or runs on several workers. Consider a Mongo TTL collection."},
+      {"endpoint": "PUT /api/projects/{pid}/share", "issue": "Turning the link off and then on again keeps old guest access tokens valid (the version is not bumped). This is probably fine, but note it if 'disable' is meant to revoke access."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ShareSettings.regenerate", "issue": "No try/catch: if the API fails there is an unhandled promise rejection and no error toast.", "selector": "[data-testid='share-regenerate-btn']", "priority": "LOW"},
+      {"component": "ShareSettings.copy", "issue": "The clipboard error is swallowed and the 'Link disalin' toast still shows even when copying failed.", "selector": "[data-testid='share-copy-btn']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile Ruang 375x667 with a portrait scene (04-06)", "issues": ["The stage takes about 62vh, so the story panel is only about 77px tall. The description and mini-plan sit below the panel's fold, and users only find them by scrolling inside the panel. Consider a slightly smaller stage cap on short phones (e.g. min(55vh,...) when the height is under 700px)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_share.py", "/app/backend/tests/probe_xff.py", "/app/backend/tests/setup_share_ui.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "HIGH: fix the share unlock rate-limit bypass through a spoofed X-Forwarded-For (use the right-most XFF entry or client.host, and add a per-token global cap)",
+    "LOW: add try/catch and an error toast to ShareSettings.regenerate; only show 'Link disalin' when the clipboard write succeeds",
+    "Optional: prune or persist _share_attempts; consider a smaller stage cap on short phones with portrait renders"
+  ],
+  "critical_code_review_comments": [
+    "server.py share_unlock: ip = x-forwarded-for.split(',')[0]. This takes the value the client controls, so the rate limit can be bypassed (confirmed).",
+    "get_share/set_share/regenerate use staff_only without get_project(). This is fine because staff see all projects, but it is inconsistent with the other endpoints.",
+    "The exclusion of 'share' in get_project/get_doc/list_projects is correct; no leak found in list, draft, PATCH or the client view."
+  ],
+  "updated_files": ["/app/backend/tests/test_share.py", "/app/backend/tests/probe_xff.py", "/app/backend/tests/setup_share_ui.py"],
+  "success_rate": {"backend": "100% functional (18/18 share tests, 85/86 regression with 1 skip); 1 security issue", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Temporary TEST_T1 Share, TEST_T1 XFF, TEST_T1 Share UI and TEST_T1 NoShare projects were created and all deleted by id. The sample project was used read-only; its share field is still absent.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use setup_share_ui.py to create a published TEST_ project with share enabled (password TEST1234); it prints PID and TOKEN. Delete it with 'python3 setup_share_ui.py del <pid>'. Run probe_xff.py after the fix: the 'spoof xff' attempts should return 429. Clerk tickets are single-use, so generate a new one for each browser session. The Presentasi tab was not tested because neither the sample nor the TEST projects have a PDF. Run pytest with the default ini (xdist); '-p no:xdist' breaks because of the ini addopts."
+}

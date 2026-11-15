@@ -551,6 +551,8 @@ async def set_share(pid: str, body: ShareIn, member: dict = Depends(staff_only))
     if body.enabled and not s.get("password_hash"):
         raise HTTPException(400, "Buat password dulu sebelum mengaktifkan link")
     s["token"] = s.get("token") or secrets.token_urlsafe(18)
+    if s.get("enabled") and not body.enabled:
+        s["version"] = int(s.get("version") or 0) + 1
     s["enabled"] = body.enabled
     s["updated_at"] = now_iso()
     await db.projects.update_one({"id": pid}, {"$set": {"share": s}})
@@ -583,14 +585,20 @@ async def share_meta(token: str):
 @api.post("/share/{token}/unlock")
 async def share_unlock(token: str, body: UnlockIn, request: Request):
     p = await _shared_project(token)
-    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    xff = [x.strip() for x in (request.headers.get("x-forwarded-for") or "").split(",") if x.strip()]
+    ip = xff[-1] if xff else (request.client.host if request.client else "")
     key, now = f"{token}:{ip}", time.time()
+    if len(_share_attempts) > 5000:
+        for k in [k for k, v in _share_attempts.items() if not v or now - v[-1] > 900]:
+            _share_attempts.pop(k, None)
     recent = [t for t in _share_attempts.get(key, []) if now - t < 900]
-    if len(recent) >= 5:
+    token_recent = [t for t in _share_attempts.get(token, []) if now - t < 900]
+    if len(recent) >= 5 or len(token_recent) >= 20:
         raise HTTPException(429, "Terlalu banyak percobaan. Coba lagi dalam 15 menit.")
     s = p["share"]
     if not bcrypt.checkpw(body.password.encode(), s["password_hash"].encode()):
         _share_attempts[key] = recent + [now]
+        _share_attempts[token] = token_recent + [now]
         raise HTTPException(401, "Password salah")
     _share_attempts.pop(key, None)
     claims = {"typ": "share", "tok": token, "pid": p["id"], "v": s.get("version", 0), "exp": int(now) + SHARE_TTL}

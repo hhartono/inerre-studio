@@ -35,13 +35,21 @@ export function ShareSettings() {
   };
   const regenerate = async () => {
     if (!window.confirm("Buat link baru? Link lama langsung tidak berlaku dan klien perlu link baru.")) return;
-    const { data: s } = await api.post(`/projects/${pid}/share/regenerate`);
-    setShare(s);
-    toast.success("Link baru dibuat");
+    try {
+      const { data: s } = await api.post(`/projects/${pid}/share/regenerate`);
+      setShare(s);
+      toast.success("Link baru dibuat");
+    } catch (e) {
+      toast.error(errMsg(e));
+    }
   };
   const copy = async () => {
-    await navigator.clipboard?.writeText(link).catch(() => {});
-    toast.success("Link disalin");
+    try {
+      await navigator.clipboard.writeText(link);
+      toast.success("Link disalin");
+    } catch {
+      toast.error("Gagal menyalin. Salin manual dari kolom link.");
+    }
   };
   if (!share) return null;
 
