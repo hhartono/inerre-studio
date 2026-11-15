@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 14: retest of the iteration_13 findings. All 4 items pass. Backend: new test_ai_patch.py passed 5/5. A title-only PATCH sent while the AI description is still pending keeps the AI text, and description_ai stays true. Re-sending the same description keeps the flag true. Sending edited text sets description_ai=false, and the change persists in the draft. A later title-only PATCH does not change the flag. In code, _bg_tasks holds the task and discards it when done. Studio UI at 1920: after uploading via upload-renders-{rid}-input, the title was changed and saved at 1.5s while the description was still empty. The AI description then appeared in the open ScenePanel at about 14s with no manual reload (the 12s re-fetch), the title was kept, and scene-description-ai-note showed. After editing the description the note disappears; after saving and reloading the text and title persist and the note stays gone. Landscape 844x390: while the rail is shown, landscape-denah-btn and landscape-story-overlay have opacity 0 and pointer-events none; after 3.5s they have opacity 1 and pointer-events auto, elementFromPoint returns the Denah button, and tapping it opens mobile-denah-sheet. The handle shows the rail again and the two elements fade out again. Mobile 390x844: scrolling thumb-rail-overlay (scrollWidth 438 > 390) every 1s for 7s kept data-shown=true, and the rail hid about 3.5s after scrolling stopped. The handle, othumb-3 navigation, auto-hide, stage-tap toggle and no page scroll (844/844) all work. Desktop 1920x800: the bottom thumb-rail is visible, with no overlay wrap, handle or landscape Denah; thumb-2 navigates. 2 auto-describe LLM calls in total. The sample project was only read. Both TEST_ projects were deleted.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "ScenePanel form reset on re-fetch",
+        "issue": "Code review, not reproduced. The useEffect at ScenePanel.tsx:26-28 resets the whole form whenever scene.description changes. When the 12s or 30s re-fetch brings the AI description, any unsaved edits to title, area or description in that window are silently replaced. Only edits after saving are safe. Suggested fix: merge only the fields the user has not touched (track dirty fields), or update form.description only when it is still empty.",
+        "selector": "[data-testid=scene-title-input], [data-testid=scene-description-input]",
+        "priority": "LOW"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_patch.py", "/app/backend/tests/test_ai_describe.py", "/app/test_reports/pytest/pytest_ai_patch.xml"],
+  "action_items": ["Optional (LOW): stop the 12s/30s draft re-fetch from overwriting unsaved ScenePanel edits (dirty-field merge)."],
+  "critical_code_review_comments": [
+    "ScenePanel useEffect deps [scene.description, ...] reset the entire form when the AI description arrives, so in-progress unsaved edits are lost.",
+    "StructureTree setTimeout reloads are not cleared on unmount or project change. This is harmless but fires extra GETs if the user leaves the editor."
+  ],
+  "updated_files": ["/app/backend/tests/test_ai_patch.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "TEST_AI Patch and TEST_AI Studio Upload projects were created and deleted. No TEST_ projects remain.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -n0 (pytest.ini adds xdist args). Sign-in tickets are single-use: run ticket.py <role> for each browser session. Landscape rail-scroll cannot be tested with the sample project because its 6 thumbs fit in 844px; portrait 390 overflows (438px), so test scroll-keep-alive there."
+}

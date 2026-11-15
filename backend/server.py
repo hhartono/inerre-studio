@@ -1,7 +1,9 @@
 import asyncio
 import base64
 import ipaddress
+import json
 import logging
+import re
 import secrets
 import time
 import os
@@ -858,11 +860,14 @@ async def write_description(scene: dict) -> str:
     room = await db.rooms.find_one({"id": scene["room_id"]}, {"_id": 0, "name": 1}) or {}
     chat = LlmChat(
         api_key=os.environ["EMERGENT_LLM_KEY"], session_id=f"describe-{scene['id']}-{new_id()}",
-        system_message="Anda copywriter studio desain interior INERRE. Tulis caption presentasi yang elegan, konkret, dan tidak berlebihan.",
+        system_message="You are the copywriter of INERRE, an interior design studio. You write elegant, concrete, understated presentation captions in English.",
     ).with_model("openai", "gpt-5.4")
-    title = f' berjudul "{scene["title"]}"' if scene.get("title") else ""
-    prompt = (f"Tulis deskripsi 2-3 kalimat dalam Bahasa Indonesia untuk render ruang \"{room.get('name', '')}\"{title}. "
-              "Satu paragraf, maksimal 45 kata. Sebut material, warna, pencahayaan, dan suasana yang terlihat. Tanpa judul, tanpa emoji, tanpa tanda kutip.")
+    title = f' currently titled "{scene["title"]}"' if scene.get("title") else ""
+    prompt = (f"This is a render of the room \"{room.get('name', '')}\"{title}. Reply with JSON only: "
+              '{"title": "...", "description": "..."}. '
+              "title: 2-5 words in English Title Case; clean up the current title's casing and wording if it is meaningful, "
+              "otherwise suggest a fitting one (e.g. 'Living Room Overview'). "
+              "description: one English paragraph, max 45 words, naming visible materials, colours, lighting and mood. No emoji, no quotes.")
     out = []
     msg = UserMessage(text=prompt, file_contents=[ImageContent(image_base64=base64.b64encode(data).decode())])
     async for ev in chat.stream_message(msg):
@@ -870,17 +875,25 @@ async def write_description(scene: dict) -> str:
             out.append(ev.content)
         elif isinstance(ev, StreamDone):
             break
-    return "".join(out).strip()
+    raw = "".join(out).strip()
+    m = re.search(r"\{.*\}", raw, re.S)
+    try:
+        parsed = json.loads(m.group(0)) if m else {}
+    except ValueError:
+        parsed = {}
+    return {"title": str(parsed.get("title") or "").strip()[:80], "description": str(parsed.get("description") or (raw if not m else "")).strip()}
 
 
 async def auto_describe(sid: str):
     try:
         scene = await db.scenes.find_one({"id": sid}, {"_id": 0})
-        if not scene or scene.get("description"):
+        if not scene:
             return
-        text = await write_description(scene)
-        if text:
-            await db.scenes.update_one({"id": sid, "description": ""}, {"$set": {"description": text, "description_ai": True}})
+        res = await write_description(scene)
+        if res["title"]:
+            await db.scenes.update_one({"id": sid, "title": scene.get("title", "")}, {"$set": {"title": res["title"]}})
+        if res["description"] and not scene.get("description"):
+            await db.scenes.update_one({"id": sid, "description": ""}, {"$set": {"description": res["description"], "description_ai": True}})
     except Exception as e:  # noqa: BLE001
         logger.error(f"Auto description failed for {sid}: {e}")
 
@@ -890,11 +903,11 @@ async def describe_scene(sid: str, member: dict = Depends(staff_only)):
     s = await get_doc("scenes", sid)
     await get_project(s["project_id"], member)
     try:
-        text = await write_description(s)
+        res = await write_description(s)
     except Exception as e:  # noqa: BLE001
         logger.error(f"Description failed: {e}")
         raise HTTPException(502, "AI sedang tidak tersedia. Coba lagi sebentar.")
-    return {"description": text}
+    return res
 
 
 @api.patch("/scenes/{sid}")

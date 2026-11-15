@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, Sparkles } from "lucide-react";
 import { toast } from "sonner";
 import { api, errMsg } from "@/lib/api";
@@ -16,16 +16,21 @@ export function ScenePanel({ scene }: { scene: Scene }) {
     setAiBusy(true);
     try {
       const { data: r } = await api.post(`/scenes/${scene.id}/describe`, {}, { timeout: 120000 });
-      setForm((f) => ({ ...f, description: r.description }));
-      toast.success("Deskripsi dibuat. Klik Simpan untuk menyimpan.");
+      setForm((f) => ({ ...f, description: r.description || f.description, title: r.title || f.title }));
+      toast.success("Judul & deskripsi dibuat. Klik Simpan untuk menyimpan.");
     } catch (e) {
       toast.error(errMsg(e));
     }
     setAiBusy(false);
   };
+  const prev = useRef(scene);
   useEffect(() => {
-    setForm({ title: scene.title, area: scene.area, description: scene.description, room_id: scene.room_id });
-  }, [scene.id, scene.title, scene.area, scene.description, scene.room_id]);
+    const p = prev.current;
+    const fresh = { title: scene.title, area: scene.area, description: scene.description, room_id: scene.room_id };
+    // Keep unsaved edits: only fields the user hasn't touched follow server updates.
+    setForm((f) => (p.id !== scene.id ? fresh : (Object.fromEntries(Object.entries(fresh).map(([k, v]) => [k, f[k] === p[k] ? v : f[k]])) as typeof f)));
+    prev.current = scene;
+  }, [scene]);
 
   const set = (k: string) => (e: any) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const saveInfo = async () => {
