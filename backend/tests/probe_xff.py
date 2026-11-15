@@ -1,4 +1,4 @@
-# Probe: does spoofing X-Forwarded-For bypass the share unlock rate limit? (creates & deletes a TEST_ project)
+# Probe: what XFF chain reaches share_unlock for various client-supplied XFF values (creates & deletes a TEST_ project)
 import requests
 from conftest import ClerkClient, USERS, BASE_URL, upload
 
@@ -13,8 +13,8 @@ try:
     print("publish", d.post(f"/api/projects/{pid}/publish").status_code)
     tok = d.put(f"/api/projects/{pid}/share", json={"enabled": True, "password": "TEST1234"}).json()["token"]
     u = f"{BASE_URL}/api/share/{tok}/unlock"
-    print("no-xff x6:", [requests.post(u, json={"password": "bad"}).status_code for _ in range(6)])
-    print("spoof xff:", [requests.post(u, json={"password": "bad"}, headers={"X-Forwarded-For": f"1.2.3.{i}"}).status_code for i in range(3)])
-    print("spoof xff correct:", requests.post(u, json={"password": "TEST1234"}, headers={"X-Forwarded-For": "5.5.5.5"}).status_code)
+    for x in [None, "1.2.3.4", "1.1.1.1, 2.2.2.2", "a, b, c, d", "11.0.0.1, 11.0.0.2, 11.0.0.3", "x"]:
+        h = {"X-Forwarded-For": x} if x else {}
+        print(repr(x), requests.post(u, json={"password": "TEST1234"}, headers=h).status_code)
 finally:
     print("cleanup", a.delete(f"/api/projects/{pid}").status_code)

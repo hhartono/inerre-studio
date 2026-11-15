@@ -1,4 +1,5 @@
 import asyncio
+import ipaddress
 import logging
 import secrets
 import time
@@ -514,6 +515,25 @@ async def published_view(p: dict) -> dict:
 # ---------- share links (guest access: secret link + password) ----------
 SHARE_TTL = 12 * 3600
 _share_attempts: dict = {}
+_TRUSTED_NETS = [ipaddress.ip_network(n) for n in (
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18", "108.162.192.0/18",
+    "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
+    "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22", "35.191.0.0/16", "130.211.0.0/22",
+    *[n.strip() for n in os.environ.get("TRUSTED_PROXY_IPS", "").split(",") if n.strip()],
+)]
+
+
+def _client_ip(request: Request) -> str:
+    # Walk X-Forwarded-For from the right, skipping our proxies; the first untrusted hop is the real client.
+    for raw in reversed([x.strip() for x in (request.headers.get("x-forwarded-for") or "").split(",")]):
+        try:
+            addr = ipaddress.ip_address(raw)
+        except ValueError:
+            continue
+        if addr.is_private or addr.is_loopback or any(addr in n for n in _TRUSTED_NETS):
+            continue
+        return str(addr)
+    return request.client.host if request.client else ""
 
 
 class ShareIn(BaseModel):
@@ -585,9 +605,7 @@ async def share_meta(token: str):
 @api.post("/share/{token}/unlock")
 async def share_unlock(token: str, body: UnlockIn, request: Request):
     p = await _shared_project(token)
-    xff = [x.strip() for x in (request.headers.get("x-forwarded-for") or "").split(",") if x.strip()]
-    hops = int(os.environ.get("TRUSTED_PROXY_HOPS", "3"))
-    ip = xff[-hops] if len(xff) >= hops else (xff[0] if xff else (request.client.host if request.client else ""))
+    ip = _client_ip(request)
     key, now = f"{token}:{ip}", time.time()
     if len(_share_attempts) > 5000:
         for k in [k for k, v in _share_attempts.items() if not v or now - v[-1] > 900]:
