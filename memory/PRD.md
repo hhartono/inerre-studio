@@ -35,6 +35,7 @@ User choices: Phase 1–2 first; watermark INERRE logo only; clients mostly on p
 - AI title+description is manual only (button "Buat judul & deskripsi (AI)", uses typed unsaved title as hint; image is source of truth). Upload no longer auto-generates; filename title → Title Case.
 - Viewer mobile portrait hides the description; larger mini plan.
 - Fullscreen tour shows a mini floor plan that follows the active scene (toggle button), tiny pins; smaller in phone landscape. CSS pseudo-fullscreen fallback for iPhone.
+- Fix: thumbnail rail auto-scroll no longer shifts the whole stage sideways (LDG slide 4 bug; replaced scrollIntoView with rail-only scrollTo).
 
 ## Backlog
 - P0 (Phase 3): revision history dropdown (read-only), A/B alternative groups + ALT hotspot, per-room & final approval with locking, pinned comments per revision, Resend emails (publish, comment, approval), watermark removed after approval.

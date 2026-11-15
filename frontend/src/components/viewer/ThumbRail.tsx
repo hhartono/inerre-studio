@@ -5,12 +5,19 @@ import type { Scene } from "@/types";
 
 export function ThumbRail({ tour, index, playing, onSelect, overlay }: { tour: Scene[]; index: number; playing: boolean; onSelect: (i: number) => void; overlay?: boolean }) {
   const activeRef = useRef<HTMLButtonElement>(null);
+  const railRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    const el = activeRef.current;
+    const rail = railRef.current;
+    if (!el || !rail) {
+      return;
+    }
+    rail.scrollTo({ left: el.offsetLeft - (rail.clientWidth - el.offsetWidth) / 2, behavior: "smooth" });
   }, [index]);
   return (
     <div
-      className={overlay ? "no-scrollbar flex gap-1.5 overflow-x-auto bg-gradient-to-t from-ink/90 to-transparent px-3 pb-2.5 pt-6" : "no-scrollbar hidden gap-3 overflow-x-auto border-t border-paper/10 bg-ink px-8 py-4 md:flex short:hidden"}
+      ref={railRef}
+      className={overlay ? "no-scrollbar relative flex gap-1.5 overflow-x-auto bg-gradient-to-t from-ink/90 to-transparent px-3 pb-2.5 pt-6" : "no-scrollbar relative hidden gap-3 overflow-x-auto border-t border-paper/10 bg-ink px-8 py-4 md:flex short:hidden"}
       data-testid={overlay ? "thumb-rail-overlay" : "thumb-rail"}
     >
       {tour.map((s, i) => {
