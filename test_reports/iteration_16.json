@@ -1,0 +1,34 @@
+{
+  "summary": "Iteration 16: AI generation is now manual only, the mobile description is hidden, and fullscreen shows a mini floor plan. Backend passed 11/11: test_ai_describe.py and test_ai_patch.py were rewritten for the manual-only flow and run with -n0, using 2 LLM calls. Uploading 'living_room-final.jpg' gives the title 'Living Room Final' and an empty description; both are still unchanged after 30s and description_ai is not set. POST /describe works with an empty body and with {title}. It returns exactly {title, description} and saves nothing. Client gets 403, unauthenticated gets 401 (both with and without a body), and a missing scene gets 404. Studio UI at 1920: the button 'BUAT JUDUL & DESKRIPSI (AI)' sends {title: <typed unsaved title>}, which was confirmed from the network request body. It shows 'MENULIS…' and is disabled while working, then fills the title and description inputs in English after about 4s. It shows the toast 'Judul & deskripsi dibuat. Klik Simpan untuk menyimpan.' and the label changes to 'TULIS ULANG…'. Save then reload keeps both. Viewer, client, sample project (read only). Portrait 390x844: story-description is in the DOM but hidden. It shows number '01 / 06', the title, and a mini plan of 350x281. No horizontal or vertical overflow (scroll 390x844). Desktop 1920: the description is visible. Fullscreen: native fullscreen works on portrait, landscape 844x390 and desktop 1920 (data-fs on/off). fs-mini-plan appears, and its active cone follows next and prev in every orientation (checked through the cone with fill-opacity 0.75). Clicking a pin in the mini plan navigates and stays in fullscreen. fs-plan-toggle-btn hides and shows the plan. Exiting removes the overlay. The mini plan never overlaps next/prev (bounding boxes checked), nor the landscape Denah button. Pseudo fullscreen was tested by removing Element.prototype.requestFullscreen: the stage becomes fixed at 0,0 and fills the viewport (390x844, and 844x390 after rotating). elementFromPoint at the corners hits the stage. The mini plan follows the active scene. Escape exits pseudo fullscreen and the button toggles it.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/scenes/{sid}/describe", "issue": "The AI's use of the typed title is inconsistent. With the title 'master_bedroom v2' on a living-room render, it returned 'Master Bedroom' and invented a 'low, sculptural bed' that is not in the image. With 'dining_area rev3' on the same render, it ignored the title and returned 'Living Room Overview'. The prompt should say that the image is the source of truth and the title is only a hint for naming."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Viewer fullscreen landscape (844x390) and portrait", "issues": ["The fs-mini-plan is about 200x158 in landscape and about 148x123 in portrait. Its numbered pins and cones crowd each other at this size (pins 01/02/03 overlap), so it is hard to read on a phone.", "In landscape the mini plan covers the top-right corner of the render (x 560-760, y 70-228). A hotspot under it would be blocked; hotspots on the sample sit near x=522, just outside it. Consider a smaller or collapsible plan, or offsetting the stage image."]},
+      {"screen": "Viewer portrait story panel", "issues": ["Now that the description is hidden, there is a large empty gap between the title (y≈437) and the mini plan (y≈543) because of mt-auto. This is acceptable but looks a little sparse."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_describe.py", "/app/backend/tests/test_ai_patch.py", "/app/backend/tests/setup_ai_ui.py", "/app/test_reports/pytest/pytest_results_iter16.xml"],
+  "action_items": [
+    "Optional: change the write_description prompt so the image wins over a misleading typed title. For example: 'Use the current title only if it matches what is visible; never describe objects not in the image.'",
+    "Optional: make fs-mini-plan more readable on phones (smaller pins in compact mode, or a tap to enlarge)."
+  ],
+  "critical_code_review_comments": [
+    "server.py: nothing sets description_ai=True any more. PATCH still writes description_ai=False on every description change. The field is now effectively dead, so remove it or set it from the frontend when an AI result is saved.",
+    "RuangStage.tsx: pseudo fullscreen does not lock body scroll (body overflow is visible). On iOS Safari the page behind a fixed stage can still rubber-band. Consider setting document.body.style.overflow='hidden' while pseudoFs is on.",
+    "RuangStage.tsx: the Escape keydown listener sets pseudoFs=false globally even when focus is in a Drawer. This is harmless but worth knowing.",
+    "ScenePanel.tsx generate(): it falls back to the old values when the AI returns an empty title or description. This is fine, but the success toast still shows when both are empty."
+  ],
+  "updated_files": ["/app/backend/tests/test_ai_describe.py", "/app/backend/tests/test_ai_patch.py", "/app/backend/tests/setup_ai_ui.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% of the requested flows"},
+  "seed_data_creation": "Created and then deleted the projects TEST_AI Describe, TEST_AI Patch and TEST_AI UI (id 6af35bfe...). No TEST_ projects remain. The sample project and LDG were not modified (viewer access was read only).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -n0. setup_ai_ui.py no longer waits for an AI description. It prints pid/sid, and '--delete PID' removes the project. To test pseudo fullscreen, use page.add_init_script to set Element.prototype.requestFullscreen to undefined. The active pin in PlanView is the plan-cone-* element with fill-opacity='0.75'. Sign-in tickets are single-use, so make one per browser run (ticket.py). This iteration made 3 LLM calls (2 backend, 1 UI)."
+}

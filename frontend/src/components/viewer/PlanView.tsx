@@ -9,18 +9,20 @@ interface Props {
   activeId?: string;
   roomId?: string | null;
   compact?: boolean;
+  tiny?: boolean;
   numbers?: Record<string, number>;
   onSelect?: (sceneId: string) => void;
 }
 
 // Sizes are in screen pixels (u = plan units per px) so pins stay small and readable on phones.
-export function PlanView({ floor, scenes, activeId, roomId, compact, numbers, onSelect }: Props) {
+export function PlanView({ floor, scenes, activeId, roomId, compact, tiny, numbers, onSelect }: Props) {
   const [ref, size] = useElementSize<HTMLDivElement>();
   const H = planHeight(floor.plan_aspect);
   const u = size.width ? PLAN_W / size.width : 2;
   const small = compact || size.width < 600;
-  const dotPx = small ? 7.5 : 9;
-  const conePx = small ? 30 : 46;
+  const dotPx = tiny ? 5 : small ? 7.5 : 9;
+  const conePx = tiny ? 20 : small ? 30 : 46;
+  const fontPx = tiny ? 5 : small ? 7.5 : 9;
   const pins = scenes
     .filter((s) => s.camera)
     .map((s) => ({ s, n: numbers?.[s.id], c: s.camera!, active: s.id === activeId, dim: !!roomId && s.room_id !== roomId }));
@@ -57,10 +59,10 @@ export function PlanView({ floor, scenes, activeId, roomId, compact, numbers, on
           return (
             <g key={`d-${s.id}`} onClick={select(s.id)} className="cursor-pointer" style={{ opacity: dim ? 0.25 : 1, transition: "opacity 0.3s" }} data-testid={`plan-pin-${s.id}`}>
               <title>{s.title}</title>
-              <circle cx={cx} cy={cy} r={dot + (active ? 2.5 : 1.5) * u} fill={active ? "#ffffff" : "#171713"} />
+              <circle cx={cx} cy={cy} r={dot + (active ? (tiny ? 1.8 : 2.5) : tiny ? 1 : 1.5) * u} fill={active ? "#ffffff" : "#171713"} />
               <circle cx={cx} cy={cy} r={dot} fill={color} />
               {n && (
-                <text x={cx} y={cy} dy="0.36em" textAnchor="middle" fontSize={(small ? 7.5 : 9) * u} fontWeight={700} fill="#171713" style={{ fontFamily: "Arial", pointerEvents: "none" }} data-testid={`plan-pin-number-${s.id}`}>
+                <text x={cx} y={cy} dy="0.36em" textAnchor="middle" fontSize={fontPx * u} fontWeight={700} fill="#171713" style={{ fontFamily: "Arial", pointerEvents: "none" }} data-testid={`plan-pin-number-${s.id}`}>
                   {String(n).padStart(2, "0")}
                 </text>
               )}

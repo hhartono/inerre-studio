@@ -1,10 +1,12 @@
-# AI scene title+description (English): auto-describe on upload (title Title Case + description), POST /scenes/{sid}/describe {title, description} (staff only), persistence via PATCH
+# AI scene title+description (English, manual only): upload no longer auto-describes (filename Title Case title, empty description),
+# POST /scenes/{sid}/describe with optional {title} body returns {title, description}, saves nothing (staff only)
 import io
 import re
 import time
 from pathlib import Path
 
 import pytest
+import requests
 from PIL import Image
 
 HERO = Path("/app/frontend/public/hero-interior.jpg")
@@ -33,10 +35,14 @@ def real_jpeg():
     return buf.getvalue()
 
 
+def get_scene(c, pid, sid):
+    return next(x for x in c.get(f"/api/projects/{pid}/draft").json()["scenes"] if x["id"] == sid)
+
+
 class TestAiDescribe:
     state = {}
 
-    def test_01_setup_and_upload_autodescribe(self, designer):
+    def test_01_upload_no_autodescribe(self, designer):
         r = designer.post("/api/projects", json={"name": "TEST_AI Describe", "code": "TAI"})
         assert r.status_code == 200, r.text
         pid = r.json()["id"]
@@ -47,61 +53,56 @@ class TestAiDescribe:
         assert r.status_code == 200, r.text
         s = r.json()
         assert s["description"] == ""
-        assert s["title"] == "living room final"
+        assert s["title"] == "Living Room Final"
+        assert not s.get("description_ai")
         self.state["sid"] = s["id"]
-        desc = None
-        for _ in range(20):
-            time.sleep(3)
-            d = designer.get(f"/api/projects/{pid}/draft").json()
-            sc = next(x for x in d["scenes"] if x["id"] == s["id"])
-            if sc.get("description"):
-                desc = sc
-                break
-        assert desc, "auto description not filled within 60s"
-        words = len(desc["description"].split())
-        print("AUTO:", desc["title"], "|", desc["description"], words)
-        assert desc.get("description_ai") is True
-        assert 5 <= words <= 60
-        assert "\n\n" not in desc["description"]
-        assert is_english(desc["description"]), desc["description"]
-        assert desc["title"] != "living room final"
-        assert is_title_case(desc["title"]), desc["title"]
-        self.state["auto"] = desc["description"]
+        time.sleep(30)
+        sc = get_scene(designer, pid, s["id"])
+        assert sc["description"] == "", sc["description"]
+        assert sc["title"] == "Living Room Final"
+        assert "description_ai" not in sc or not sc["description_ai"]
 
     def test_02_client_forbidden(self, client_user):
-        r = client_user.post(f"/api/scenes/{self.state['sid']}/describe")
-        assert r.status_code == 403
+        assert client_user.post(f"/api/scenes/{self.state['sid']}/describe").status_code == 403
+        assert client_user.post(f"/api/scenes/{self.state['sid']}/describe", json={"title": "X"}).status_code == 403
 
     def test_03_unauth_and_404(self, designer):
-        import requests
         from conftest import BASE_URL
         assert requests.post(f"{BASE_URL}/api/scenes/{self.state['sid']}/describe").status_code == 401
+        assert requests.post(f"{BASE_URL}/api/scenes/{self.state['sid']}/describe", json={"title": "X"}).status_code == 401
         assert designer.post("/api/scenes/doesnotexist/describe").status_code == 404
 
-    def test_04_describe_not_saved(self, designer):
-        # filename-like title -> AI must suggest a real title
+    def test_04_describe_empty_body_uses_saved_title(self, designer):
         assert designer.patch(f"/api/scenes/{self.state['sid']}", json={"title": "IMG 2034"}).status_code == 200
         r = designer.post(f"/api/scenes/{self.state['sid']}/describe")
         assert r.status_code == 200, r.text
         body = r.json()
-        print("MANUAL:", body)
+        print("EMPTY BODY:", body)
         assert set(body) == {"title", "description"}
-        text = body["description"]
-        assert isinstance(text, str) and 5 <= len(text.split()) <= 60
-        assert is_english(text), text
+        assert 5 <= len(body["description"].split()) <= 60
+        assert is_english(body["description"]), body["description"]
         assert is_title_case(body["title"]) and "IMG" not in body["title"] and "2034" not in body["title"], body["title"]
-        d = designer.get(f"/api/projects/{self.state['pid']}/draft").json()
-        sc = next(x for x in d["scenes"] if x["id"] == self.state["sid"])
-        assert sc["description"] == self.state["auto"]  # not persisted
-        assert sc["title"] == "IMG 2034"
+        sc = get_scene(designer, self.state["pid"], self.state["sid"])
+        assert sc["description"] == "" and sc["title"] == "IMG 2034"
 
-    def test_05_patch_description_persists(self, designer):
-        r = designer.patch(f"/api/scenes/{self.state['sid']}", json={"description": "TEST_manual desc"})
+    def test_05_describe_with_unsaved_title(self, designer):
+        r = designer.post(f"/api/scenes/{self.state['sid']}/describe", json={"title": "master_bedroom v2"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        print("WITH TITLE:", body)
+        assert set(body) == {"title", "description"}
+        assert is_title_case(body["title"]), body["title"]
+        assert "bedroom" in body["title"].lower(), body["title"]
+        assert "v2" not in body["title"].lower()
+        assert is_english(body["description"]), body["description"]
+        sc = get_scene(designer, self.state["pid"], self.state["sid"])
+        assert sc["description"] == "" and sc["title"] == "IMG 2034"  # nothing saved
+
+    def test_06_patch_description_persists(self, designer):
+        r = designer.patch(f"/api/scenes/{self.state['sid']}", json={"description": "TEST_manual desc", "title": "TEST_Judul"})
         assert r.status_code == 200
-        d = designer.get(f"/api/projects/{self.state['pid']}/draft").json()
-        sc = next(x for x in d["scenes"] if x["id"] == self.state["sid"])
-        assert sc["description"] == "TEST_manual desc"
-        print("description_ai after manual edit:", sc.get("description_ai"))
+        sc = get_scene(designer, self.state["pid"], self.state["sid"])
+        assert sc["description"] == "TEST_manual desc" and sc["title"] == "TEST_Judul"
 
     def test_99_cleanup(self, admin):
         pid = self.state.get("pid")

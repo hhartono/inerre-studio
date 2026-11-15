@@ -1,7 +1,6 @@
 # Creates a TEST_ project with one real-photo scene for AI-description UI testing; prints pid / sid. `--delete PID` removes it.
 import io
 import sys
-import time
 
 from PIL import Image
 from conftest import ClerkClient, USERS
@@ -19,9 +18,5 @@ pid = d.post("/api/projects", json={"name": "TEST_AI UI", "code": "TUI"}).json()
 fid = d.post(f"/api/projects/{pid}/floors", json={"name": "Lantai 1"}).json()["id"]
 rid = d.post(f"/api/floors/{fid}/rooms", json={"name": "Ruang Tamu"}).json()["id"]
 sid = d.post(f"/api/rooms/{rid}/scenes", files={"file": ("TEST_sofa.jpg", buf.getvalue(), "image/jpeg")}).json()["id"]
-for _ in range(20):
-    time.sleep(3)
-    sc = next(x for x in d.get(f"/api/projects/{pid}/draft").json()["scenes"] if x["id"] == sid)
-    if sc.get("description"):
-        break
-print("pid", pid, "sid", sid, "ai", sc.get("description_ai"), "desc", sc.get("description"))
+sc = next(x for x in d.get(f"/api/projects/{pid}/draft").json()["scenes"] if x["id"] == sid)
+print("pid", pid, "sid", sid, "title", sc.get("title"), "desc", repr(sc.get("description")))

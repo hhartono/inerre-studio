@@ -205,9 +205,9 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
             </div>
           </div>
           {isFs && fsPlan && floor?.plan_url && (
-            <div onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="glass fade-up absolute right-2 top-12 z-30 w-[38vw] max-w-[300px] p-2 md:right-[84px] md:top-[72px] md:w-[22vw] short:w-[26vw] short:max-w-[200px]" data-testid="fs-mini-plan">
-              <p className="eyebrow mb-1.5 truncate text-[8.5px] text-paper/60">{floor.name}</p>
-              <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact numbers={maps.number} onSelect={goTo} />
+            <div onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="glass fade-up absolute right-2 top-12 z-30 w-[38vw] max-w-[300px] p-2 md:right-[84px] md:top-[72px] md:w-[22vw] short:right-[72px] short:top-12 short:w-[17vw] short:max-w-[140px] short:p-1.5" data-testid="fs-mini-plan">
+              <p className="eyebrow mb-1.5 truncate text-[8.5px] text-paper/60 short:mb-1 short:text-[7.5px]">{floor.name}</p>
+              <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact tiny numbers={maps.number} onSelect={goTo} />
             </div>
           )}
           <button onClick={(e) => { e.stopPropagation(); go(-1); }} className={`${iconBtn} absolute left-2 top-1/2 z-20 -translate-y-1/2 md:left-6 md:h-12 md:w-12`} data-testid="prev-scene-btn">

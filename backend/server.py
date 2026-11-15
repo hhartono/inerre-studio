@@ -861,6 +861,7 @@ async def write_description(scene: dict) -> dict:
               '{"title": "...", "description": "..."}. '
               "title: 2-5 words in English Title Case; clean up the current title's casing and wording if it is meaningful (drop file words like final, v2, rev, img, render), "
               "otherwise suggest a fitting one (e.g. 'Living Room Overview'). "
+              "The image is the source of truth: use the current title only as a naming hint when it matches what is visible, and never describe objects not in the image. "
               "description: one English paragraph, max 45 words, naming visible materials, colours, lighting and mood. No emoji, no quotes.")
     out = []
     msg = UserMessage(text=prompt, file_contents=[ImageContent(image_base64=base64.b64encode(data).decode())])
