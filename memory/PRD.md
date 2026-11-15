@@ -40,6 +40,7 @@ User choices: Phase 1–2 first; watermark INERRE logo only; clients mostly on p
 - Rotate hint: "Putar HP untuk tampilan lebih luas" (animated phone icon) when the tour starts on a portrait phone; hides after 6s or on rotation.
 - Tour start sequence: 1) welcome cover (INERRE wordmark only) 2.2s, tap to skip, autoplay waits for it; 2) rotate hint centred (portrait phones only, 4.5s or until rotated); 3) small "Ketuk 2x atau cubit untuk keluar" at the bottom, 3.2s.
 - All viewer plans (mini plan, fullscreen plan, Denah tab, bottom sheet): inactive camera pins/cones faded (pins 50%, cones ~15%), only the active camera is fully bold.
+- Browser tab title "INERRE Presentation System"; INERRE app icon (brass serif I on ink) as favicon/apple-touch/PWA icons; manifest.json makes it installable ("Add to Home Screen", standalone).
 - Fix: thumbnail rail auto-scroll no longer shifts the whole stage sideways (LDG slide 4 bug; replaced scrollIntoView with rail-only scrollTo).
 
 ## Backlog
