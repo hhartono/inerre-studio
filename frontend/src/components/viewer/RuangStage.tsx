@@ -125,12 +125,26 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
     const next = !playing;
     setPlaying(next);
     if (data.music_url) setMusicOn(next);
+    if (next && !isFs) enterFs();
   };
 
   const [nativeFs, setNativeFs] = useState(false);
   const [pseudoFs, setPseudoFs] = useState(false);
   const [fsPlan, setFsPlan] = useState(true);
+  const [fsHint, setFsHint] = useState(false);
   const isFs = nativeFs || pseudoFs;
+  const pinch = useRef<number | null>(null);
+  const lastTap = useRef(0);
+  useEffect(() => {
+    if (!isFs) {
+      return;
+    }
+    setFsHint(true);
+    const t = setTimeout(() => setFsHint(false), 3000);
+    return () => {
+      clearTimeout(t);
+    };
+  }, [isFs]);
   useEffect(() => {
     const onFs = () => setNativeFs(!!stageRef.current && document.fullscreenElement === stageRef.current);
     const onEsc = (e: KeyboardEvent) => {
@@ -144,13 +158,17 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
     };
   }, []);
 
-  const toggleFs = () => {
-    if (document.fullscreenElement) return void document.exitFullscreen();
-    if (pseudoFs) return setPseudoFs(false);
+  const enterFs = () => {
     const el = stageRef.current;
     if (el?.requestFullscreen) el.requestFullscreen().catch(() => setPseudoFs(true));
     else setPseudoFs(true);
   };
+  const exitFs = () => {
+    if (document.fullscreenElement) document.exitFullscreen();
+    setPseudoFs(false);
+  };
+  const toggleFs = () => (isFs ? exitFs() : enterFs());
+  const dist = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col" data-testid="ruang-view" data-wakelock={wake ? "on" : "off"}>
@@ -158,17 +176,44 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
         <div
           ref={stageRef}
           className={`relative h-[var(--stage-h)] shrink-0 overflow-hidden bg-ink transition-[height] duration-500 md:h-auto md:flex-1 short:h-auto short:flex-1 ${pseudoFs ? "!fixed !inset-0 !z-[100] !h-[100dvh]" : ""}`}
-          style={{ "--stage-h": `min(62vh, max(48vh, calc(100vh - 360px)), calc((100vw - 16px) / ${scene.aspect || 1.5} + 52px))` } as React.CSSProperties}
-          onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
+          style={{ "--stage-h": `min(62vh, max(48vh, calc(100vh - 360px)), calc((100vw - 16px) / ${scene.aspect || 1.5} + 52px))`, touchAction: isFs ? "pan-x" : undefined } as React.CSSProperties}
+          onTouchStart={(e) => {
+            if (e.touches.length === 2) {
+              pinch.current = dist(e.touches);
+              touchX.current = null;
+            } else if (e.touches.length === 1) touchX.current = e.touches[0].clientX;
+          }}
+          onTouchMove={(e) => {
+            if (pinch.current && e.touches.length === 2 && dist(e.touches) < pinch.current * 0.7) {
+              pinch.current = null;
+              if (isFs) exitFs();
+            }
+          }}
           onTouchEnd={(e) => {
+            if (e.touches.length === 0) pinch.current = null;
             if (touchX.current === null) return;
             const dx = e.changedTouches[0].clientX - touchX.current;
             if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
             touchX.current = null;
           }}
-          onClick={() => (railShown ? setRailShown(false) : showRail())}
+          onClick={() => {
+            const now = Date.now();
+            if (isFs && now - lastTap.current < 320) {
+              lastTap.current = 0;
+              return exitFs();
+            }
+            lastTap.current = now;
+            if (railShown) setRailShown(false);
+            else showRail();
+          }}
           data-testid="ruang-stage"
+          data-fs={isFs ? "on" : "off"}
         >
+          {isFs && (
+            <p className={`glass eyebrow pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap px-4 py-2.5 text-[9.5px] text-paper transition-opacity duration-500 ${fsHint ? "opacity-100" : "opacity-0"}`} data-testid="fs-exit-hint">
+              Ketuk 2x atau cubit untuk keluar
+            </p>
+          )}
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />
           <div className="absolute inset-0 bg-ink/35" />
           <div onClick={(e) => e.stopPropagation()} className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-2 md:items-start md:gap-4 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
