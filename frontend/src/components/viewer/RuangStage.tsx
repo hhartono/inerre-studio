@@ -247,10 +247,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
             >
               <img src={img(tour[0]?.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl" />
               <div className={`relative px-8 transition-[opacity,transform] duration-1000 ${phase === "cover" ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}>
-                <p className="eyebrow text-[13px] tracking-[0.6em] text-paper md:text-base" data-testid="tour-cover-logo">INERRE</p>
-                <span className="mx-auto my-5 block h-px w-12 bg-brass" />
-                <h2 className="display text-2xl leading-tight text-paper md:text-4xl" data-testid="tour-cover-project">{data.project.name}</h2>
-                {data.revision && <p className="eyebrow mt-4 text-[9.5px] text-brass">Revisi {pad(data.revision.number)}</p>}
+                <p className="eyebrow pl-[0.6em] text-xl tracking-[0.6em] text-paper md:text-3xl" data-testid="tour-cover-logo">INERRE</p>
               </div>
             </div>
           )}
