@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Map as MapIcon, Music2, Pause, Play, VolumeX } from "lucide-react";
+import { ChevronLeft, ChevronRight, Map as MapIcon, Music2, Play, Smartphone, Square, VolumeX } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { img, pad } from "@/lib/api";
 import type { ViewMaps } from "@/lib/viewer";
@@ -121,17 +121,13 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
     };
   }, [playing]);
 
-  const togglePlay = () => {
-    const next = !playing;
-    setPlaying(next);
-    if (data.music_url) setMusicOn(next);
-    if (next && !isFs) enterFs();
-  };
+  const togglePlay = () => (playing ? exitFs() : startTour());
 
   const [nativeFs, setNativeFs] = useState(false);
   const [pseudoFs, setPseudoFs] = useState(false);
   const [fsPlan, setFsPlan] = useState(true);
   const [fsHint, setFsHint] = useState(false);
+  const [rotateHint, setRotateHint] = useState(false);
   const isFs = nativeFs || pseudoFs;
   const pinch = useRef<number | null>(null);
   const lastTap = useRef(0);
@@ -140,15 +136,36 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
       return;
     }
     setFsHint(true);
+    const portrait = window.matchMedia("(orientation: portrait) and (max-width: 767px)");
+    setRotateHint(portrait.matches);
+    const onRot = () => {
+      if (!portrait.matches) setRotateHint(false);
+    };
+    portrait.addEventListener?.("change", onRot);
     const t = setTimeout(() => setFsHint(false), 3000);
+    const t2 = setTimeout(() => setRotateHint(false), 6000);
     return () => {
       clearTimeout(t);
+      clearTimeout(t2);
+      portrait.removeEventListener?.("change", onRot);
+      setRotateHint(false);
     };
   }, [isFs]);
+  const stopTour = useCallback(() => {
+    setPlaying(false);
+    setMusicOn(false);
+  }, [setMusicOn]);
   useEffect(() => {
-    const onFs = () => setNativeFs(!!stageRef.current && document.fullscreenElement === stageRef.current);
+    const onFs = () => {
+      const on = !!stageRef.current && document.fullscreenElement === stageRef.current;
+      setNativeFs(on);
+      if (!on) stopTour();
+    };
     const onEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPseudoFs(false);
+      if (e.key === "Escape") {
+        setPseudoFs(false);
+        stopTour();
+      }
     };
     document.addEventListener("fullscreenchange", onFs);
     window.addEventListener("keydown", onEsc);
@@ -156,9 +173,11 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
       document.removeEventListener("fullscreenchange", onFs);
       window.removeEventListener("keydown", onEsc);
     };
-  }, []);
+  }, [stopTour]);
 
-  const enterFs = () => {
+  const startTour = () => {
+    setPlaying(true);
+    if (data.music_url) setMusicOn(true);
     const el = stageRef.current;
     if (el?.requestFullscreen) el.requestFullscreen().catch(() => setPseudoFs(true));
     else setPseudoFs(true);
@@ -166,8 +185,8 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   const exitFs = () => {
     if (document.fullscreenElement) document.exitFullscreen();
     setPseudoFs(false);
+    stopTour();
   };
-  const toggleFs = () => (isFs ? exitFs() : enterFs());
   const dist = (t: React.TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
 
   return (
@@ -214,6 +233,11 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               Ketuk 2x atau cubit untuk keluar
             </p>
           )}
+          {isFs && (
+            <p className={`glass pointer-events-none absolute bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-xs text-paper/85 transition-opacity duration-700 ${rotateHint ? "opacity-100" : "opacity-0"}`} data-testid="rotate-hint" data-shown={rotateHint ? "true" : "false"}>
+              <Smartphone size={14} className="rotate-hint-icon text-brass" /> Putar HP untuk tampilan lebih luas
+            </p>
+          )}
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />
           <div className="absolute inset-0 bg-ink/35" />
           <div onClick={(e) => e.stopPropagation()} className="absolute inset-x-0 top-0 z-20 flex items-center justify-between gap-3 px-3 py-2 md:items-start md:gap-4 md:px-8 md:py-5 short:py-2" data-testid="scene-topline">
@@ -227,11 +251,8 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
                   {musicOn ? <Music2 size={15} /> : <VolumeX size={15} />}
                 </button>
               )}
-              <button onClick={togglePlay} className={iconBtn} title={playing ? "Jeda" : "Putar tur"} data-testid="autoplay-toggle-btn">
-                {playing ? <Pause size={15} /> : <Play size={15} />}
-              </button>
-              <button onClick={toggleFs} className={iconBtn} title={isFs ? "Keluar layar penuh" : "Layar penuh"} data-testid="fullscreen-btn" data-fs={isFs ? "on" : "off"}>
-                {isFs ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+              <button onClick={togglePlay} className={`${iconBtn} ${playing ? "text-brass" : ""}`} title={playing ? "Hentikan tur" : "Mulai tur (layar penuh)"} data-testid="autoplay-toggle-btn" data-fs={isFs ? "on" : "off"}>
+                {playing ? <Square size={13} /> : <Play size={15} />}
               </button>
               {isFs && floor?.plan_url ? (
                 <button onClick={() => setFsPlan((v) => !v)} className={`${iconBtn} ${fsPlan ? "text-brass" : ""}`} title={fsPlan ? "Sembunyikan denah" : "Tampilkan denah"} data-testid="fs-plan-toggle-btn">

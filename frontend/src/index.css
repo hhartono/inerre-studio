@@ -126,6 +126,23 @@
     }
 }
 
+.rotate-hint-icon {
+    animation: rotate-hint 2.4s ease-in-out infinite;
+}
+
+@keyframes rotate-hint {
+    0%, 25% {
+        transform: rotate(0deg);
+    }
+    55%, 85% {
+        transform: rotate(-90deg);
+    }
+    100% {
+        transform: rotate(0deg);
+    }
+}
+
+
 .protect img {
     -webkit-user-drag: none;
     user-select: none;
