@@ -1,0 +1,29 @@
+{
+  "summary": "Iteration 11 backend-only retest of _client_ip() (walks XFF from the right, skipping invalid, private/loopback, Cloudflare IPv4, Google LB 35.191.0.0/16 and 130.211.0.0/22, and TRUSTED_PROXY_IPS entries). The iteration_10 HIGH finding is FIXED. Over the public URL, one machine sending malformed XFF 'x' now gets exactly 5x 401, then 429 (probe: 5 of 24 attempts returned 401; it was 20 in iteration_10). Also 429 for 'a, b, c, d', '35.191.1.1', 'x, 1.2.3.4', '::1, junk' and '999.1.1.1', even with the correct password. Rotating valid spoofed XFF gives 5x 401, then 429. A different real client (internal crafted chain, including a chain with a trailing 35.191.x GFE hop and junk) is not locked out and gets 200. The pod egress key is locked (429) whatever spoof is prepended. Junk, private and extra 130.211/35.191 hops in the chain do not change the key. All-private chain or no XFF falls back to client.host. A success resets that client's own counter. The per-token cap of 20 across IPs still gives 429, including on the public path. Share rate-limit suite: 17/17 passed. Full backend regression: 100 passed, 1 skipped (the last-admin guard is skipped because 2 admins exist).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/share/{token}/unlock (_client_ip)", "issue": "Code review, not exploited live. The whole Cloudflare IPv4 list is skipped at ANY position. If the real client hop itself is a Cloudflare IP, it is skipped and the next client-supplied entry to its left becomes the key, which is spoofable. Examples: users or attackers on Cloudflare WARP/1.1.1.1 (egress 104.28.x.x, inside 104.24.0.0/14) or requests sent from a Cloudflare Worker. Such an attacker can rotate the left XFF entry to get 20 tries and trip the per-token cap, which is the all-guest 15-min lockout from iteration_10, but only for CF-origin clients. Brute force stays bounded at 20 per 15 min. Mitigation: skip CF ranges only for the expected CF egress hop (at most one CF entry to the right of the real-client hop), then take the next valid entry as-is."},
+      {"endpoint": "_TRUSTED_NETS", "issue": "No Cloudflare IPv6 ranges. If the CF egress hop is ever IPv6 (e.g. 2a06:98c0::/29 or 2400:cb00::/32), it would be taken as the client key and would rotate per request, so the per-IP limit would be bypassed again. Every egress observed so far was IPv4. Add the CF IPv6 list for robustness."},
+      {"endpoint": "rate limit store", "issue": "Still in-memory and per-worker, and it resets on restart (known, unchanged)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_share_ratelimit.py", "/app/backend/tests/test_share.py", "/app/backend/tests/probe_xff_count.py", "/app/test_reports/pytest/pytest_results_share_rl.xml", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "LOW/MEDIUM: limit Cloudflare-range skipping to the expected CF egress position, so clients whose real IP is in CF ranges (WARP, Workers) cannot spoof the key with a left XFF entry.",
+    "LOW: add the Cloudflare IPv6 ranges to _TRUSTED_NETS."
+  ],
+  "critical_code_review_comments": [
+    "_client_ip: the right-to-left walk with ipaddress validation is correct, and the malformed-XFF / extra-GFE-hop shift is resolved.",
+    "Private skipping also skips documentation ranges (203.0.113/24, 198.51.100/24, 192.0.2/24 are is_private in Python 3.11). The tests were updated to use public IPs for that reason.",
+    "Skipping CF ranges anywhere in the chain trusts too broadly (see minor issue).",
+    "TRUSTED_PROXY_HOPS is no longer referenced in code or tests."
+  ],
+  "updated_files": ["/app/backend/tests/test_share_ratelimit.py (rewritten for the right-walk logic: private/doc test IPs replaced with public ones; added junk/private/GFE-hop chain checks, malformed-variant public checks, and a check that another client is not locked by a malformed-XFF attacker)"],
+  "success_rate": {"backend": "100% (17/17 rate-limit tests; full regression 100 passed, 1 skipped)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "Created the TEST_T1 RL XFF/Malformed/Hop/Cap, TEST_T1 XFF count and test_share projects, and deleted all of them by id. Verified in the DB that no TEST_ projects remain. The backend was restarted at the end to clear rate-limit state.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Restart the backend before the share rate-limit tests (in-memory state). pytest.ini uses xdist loadscope, so each class has its own token. Test IPs in crafted chains must be public and non-Cloudflare (81.2.x, 45.x); doc/private ranges are skipped and fall back to 127.0.0.1. Internal chain = '<spoof>, ip, 172.71.1.1 (CF), 34.8.246.104 (LB)'. The pod egress IP is found with api.ipify.org."
+}

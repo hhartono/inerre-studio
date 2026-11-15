@@ -515,22 +515,30 @@ async def published_view(p: dict) -> dict:
 # ---------- share links (guest access: secret link + password) ----------
 SHARE_TTL = 12 * 3600
 _share_attempts: dict = {}
-_TRUSTED_NETS = [ipaddress.ip_network(n) for n in (
+_CF_NETS = [ipaddress.ip_network(n) for n in (
     "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18", "108.162.192.0/18",
     "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17", "162.158.0.0/15", "104.16.0.0/13",
-    "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22", "35.191.0.0/16", "130.211.0.0/22",
+    "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22", "2400:cb00::/32", "2606:4700::/32", "2803:f800::/32",
+    "2405:b500::/32", "2405:8100::/32", "2a06:98c0::/29", "2c0f:f248::/32",
+)]
+_TRUSTED_NETS = [ipaddress.ip_network(n) for n in (
+    "35.191.0.0/16", "130.211.0.0/22",
     *[n.strip() for n in os.environ.get("TRUSTED_PROXY_IPS", "").split(",") if n.strip()],
 )]
 
 
 def _client_ip(request: Request) -> str:
-    # Walk X-Forwarded-For from the right, skipping our proxies; the first untrusted hop is the real client.
+    # Walk X-Forwarded-For from the right, skipping our proxies (and at most one Cloudflare egress hop).
+    cf_skipped = False
     for raw in reversed([x.strip() for x in (request.headers.get("x-forwarded-for") or "").split(",")]):
         try:
             addr = ipaddress.ip_address(raw)
         except ValueError:
             continue
         if addr.is_private or addr.is_loopback or any(addr in n for n in _TRUSTED_NETS):
+            continue
+        if not cf_skipped and any(addr in n for n in _CF_NETS):
+            cf_skipped = True
             continue
         return str(addr)
     return request.client.host if request.client else ""
