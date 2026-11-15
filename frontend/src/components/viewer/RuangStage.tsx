@@ -24,6 +24,7 @@ const iconBtn = "glass inline-flex h-8 w-8 items-center justify-center text-pape
 export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusicOn }: Props) {
   const scene = tour[index];
   const [playing, setPlaying] = useState(false);
+  const [phase, setPhase] = useState<"cover" | "rotate" | "exit" | null>(null);
   const [sheet, setSheet] = useState(false);
   const [wake, setWake] = useState(false);
   const [railShown, setRailShown] = useState(true);
@@ -55,14 +56,14 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   };
 
   useEffect(() => {
-    if (!playing) {
+    if (!playing || phase === "cover") {
       return;
     }
     const t = setTimeout(() => go(1), 7000);
     return () => {
       clearTimeout(t);
     };
-  }, [playing, index, go]);
+  }, [playing, index, go, phase === "cover"]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -126,29 +127,35 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   const [nativeFs, setNativeFs] = useState(false);
   const [pseudoFs, setPseudoFs] = useState(false);
   const [fsPlan, setFsPlan] = useState(true);
-  const [fsHint, setFsHint] = useState(false);
-  const [rotateHint, setRotateHint] = useState(false);
   const isFs = nativeFs || pseudoFs;
   const pinch = useRef<number | null>(null);
   const lastTap = useRef(0);
+  const skip = useRef<() => void>(() => {});
   useEffect(() => {
     if (!isFs) {
+      setPhase(null);
       return;
     }
-    setFsHint(true);
     const portrait = window.matchMedia("(orientation: portrait) and (max-width: 767px)");
-    setRotateHint(portrait.matches);
+    let t: ReturnType<typeof setTimeout>;
+    let cur: typeof phase = null;
+    const step = (p: typeof phase, ms: number, next: () => void) => {
+      cur = p;
+      setPhase(p);
+      clearTimeout(t);
+      t = setTimeout(next, ms);
+      skip.current = next;
+    };
+    const exit = () => step("exit", 3200, () => setPhase(null));
+    const rotate = () => (portrait.matches ? step("rotate", 4500, exit) : exit());
     const onRot = () => {
-      if (!portrait.matches) setRotateHint(false);
+      if (!portrait.matches && cur === "rotate") exit();
     };
     portrait.addEventListener?.("change", onRot);
-    const t = setTimeout(() => setFsHint(false), 3000);
-    const t2 = setTimeout(() => setRotateHint(false), 6000);
+    step("cover", 2200, rotate);
     return () => {
       clearTimeout(t);
-      clearTimeout(t2);
       portrait.removeEventListener?.("change", onRot);
-      setRotateHint(false);
     };
   }, [isFs]);
   const stopTour = useCallback(() => {
@@ -229,13 +236,32 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           data-fs={isFs ? "on" : "off"}
         >
           {isFs && (
-            <p className={`glass eyebrow pointer-events-none absolute left-1/2 top-1/2 z-40 -translate-x-1/2 -translate-y-1/2 whitespace-nowrap px-4 py-2.5 text-[9.5px] text-paper transition-opacity duration-500 ${fsHint ? "opacity-100" : "opacity-0"}`} data-testid="fs-exit-hint">
-              Ketuk 2x atau cubit untuk keluar
+            <div
+              onClick={(e) => {
+                e.stopPropagation();
+                skip.current();
+              }}
+              className={`absolute inset-0 z-50 flex flex-col items-center justify-center bg-ink/95 text-center transition-opacity duration-700 ${phase === "cover" ? "opacity-100" : "pointer-events-none opacity-0"}`}
+              data-testid="tour-cover"
+              data-shown={phase === "cover" ? "true" : "false"}
+            >
+              <img src={img(tour[0]?.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-110 object-cover opacity-25 blur-2xl" />
+              <div className={`relative px-8 transition-[opacity,transform] duration-1000 ${phase === "cover" ? "translate-y-0 opacity-100" : "translate-y-2 opacity-0"}`}>
+                <p className="eyebrow text-[13px] tracking-[0.6em] text-paper md:text-base" data-testid="tour-cover-logo">INERRE</p>
+                <span className="mx-auto my-5 block h-px w-12 bg-brass" />
+                <h2 className="display text-2xl leading-tight text-paper md:text-4xl" data-testid="tour-cover-project">{data.project.name}</h2>
+                {data.revision && <p className="eyebrow mt-4 text-[9.5px] text-brass">Revisi {pad(data.revision.number)}</p>}
+              </div>
+            </div>
+          )}
+          {isFs && (
+            <p className={`glass pointer-events-none absolute left-1/2 top-1/2 z-40 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2.5 whitespace-nowrap px-5 py-3 text-sm text-paper/90 transition-opacity duration-700 ${phase === "rotate" ? "opacity-100" : "opacity-0"}`} data-testid="rotate-hint" data-shown={phase === "rotate" ? "true" : "false"}>
+              <Smartphone size={16} className="rotate-hint-icon text-brass" /> Putar HP untuk tampilan lebih luas
             </p>
           )}
           {isFs && (
-            <p className={`glass pointer-events-none absolute bottom-20 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap px-4 py-2.5 text-xs text-paper/85 transition-opacity duration-700 ${rotateHint ? "opacity-100" : "opacity-0"}`} data-testid="rotate-hint" data-shown={rotateHint ? "true" : "false"}>
-              <Smartphone size={14} className="rotate-hint-icon text-brass" /> Putar HP untuk tampilan lebih luas
+            <p className={`pointer-events-none absolute bottom-6 left-1/2 z-40 -translate-x-1/2 whitespace-nowrap bg-ink/60 px-3 py-1.5 text-[10px] tracking-wide text-paper/70 transition-opacity duration-500 ${phase === "exit" ? "opacity-100" : "opacity-0"}`} data-testid="fs-exit-hint" data-shown={phase === "exit" ? "true" : "false"}>
+              Ketuk 2x atau cubit untuk keluar
             </p>
           )}
           <img src={img(scene.thumb_url)} alt="" className="pointer-events-none absolute inset-0 h-full w-full scale-125 object-cover opacity-55 blur-3xl transition-opacity duration-700" />

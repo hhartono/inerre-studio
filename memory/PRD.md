@@ -38,6 +38,7 @@ User choices: Phase 1–2 first; watermark INERRE logo only; clients mostly on p
 - Starting the tour (Play) enters fullscreen automatically (portrait & landscape); exit by double tap, pinch-in, Esc or the button; hint "Ketuk 2x atau cubit untuk keluar" shown 3s.
 - Tour is always fullscreen: Play = start tour + fullscreen; stopping (Stop button, double tap, pinch-in, Esc, native exit) exits fullscreen and stops the tour. Separate fullscreen button removed.
 - Rotate hint: "Putar HP untuk tampilan lebih luas" (animated phone icon) when the tour starts on a portrait phone; hides after 6s or on rotation.
+- Tour start sequence: 1) welcome cover (INERRE wordmark, project name, revision) 2.2s, tap to skip, autoplay waits for it; 2) rotate hint centred (portrait phones only, 4.5s or until rotated); 3) small "Ketuk 2x atau cubit untuk keluar" at the bottom, 3.2s.
 - Fix: thumbnail rail auto-scroll no longer shifts the whole stage sideways (LDG slide 4 bug; replaced scrollIntoView with rail-only scrollTo).
 
 ## Backlog
