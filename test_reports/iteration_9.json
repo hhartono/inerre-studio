@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 9 retest of the share-link fixes. Backend: test_share.py (updated) and the new test_share_ratelimit.py have 23/23 passing, and the full regression run has 90 passed and 1 skipped. Fixed and confirmed: (1) Rotating a spoofed X-Forwarded-For no longer bypasses the rate limit: 5x 401, then 429 for every spoofed value, a multi-entry XFF and the correct password. (2) The per-token cap works: 20 failures spread over 4 simulated client IPs (internal port, right-most XFF controlled), then a new IP gets 429 for wrong and correct passwords, and the public URL also gets 429. (3) Disabling the link bumps the version, so old guest access gets 401 after re-enabling; re-unlock works; enabled=true while already enabled does not revoke. UI: ShareSettings copy shows 'Link disalin' when the clipboard write succeeds (clipboard content checked) and 'Gagal menyalin...' when writeText rejects. A failed regenerate (500 forced via route) shows an error toast and the link stays the same. Toggle off/on shows toasts, the guest sees the unlock form again, and re-unlock works. Guest /s/{token}: wrong password shows 'Password salah'; the correct password opens the viewer and access survives a reload. Mobile 375x667 on sample scenes 04-06 (aspect 0.8): the stage is 320px (48vh), the story panel is 171px, title and description are visible without inner scroll, and docH == vh. At 390x844 the stage is 484px, the story panel 184px, and there is no page scroll. NEW FINDING: in this environment the right-most XFF entry is the Google load balancer IP (34.8.246.104), which is the same for every visitor, so the per-IP limit is effectively a per-token limit of 5 for everyone.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/share/{token}/unlock", "issue": "AVAILABILITY / lockout DoS. A temporary debug log showed the real X-Forwarded-For chain: '<client-supplied...>, 136.70.105.25 (real client, added by the CF worker), 172.71.x.x / 104.22.x.x (Cloudflare egress, varies per request), 34.8.246.104 (Google LB, constant)'. Because xff[-1] is always 34.8.246.104, key = token:34.8.246.104 is shared by ALL guests. Any 5 wrong attempts by anyone (a client's relative mistyping, or an attacker) lock out every guest of that link for 15 min, and an attacker can keep it locked indefinitely with 5 requests every 15 min (the per-token cap of 20 is never reached first). Brute-force protection itself holds: no bypass. Fix: take the client IP at a fixed trusted hop, xff[-3] here (make it configurable, e.g. env TRUSTED_PROXY_HOPS=3, because production ingress may differ, and fall back to client.host). Keep the per-token cap of 20 as the global backstop. Optionally only count toward the per-token cap and show the guest a clearer message.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/share/{token}/unlock", "issue": "bcrypt.checkpw runs synchronously inside an async handler and blocks the event loop (about 100-250ms per attempt). Use await asyncio.to_thread(bcrypt.checkpw, ...)."},
+      {"endpoint": "rate limit store", "issue": "Still in-memory: it resets on restart and is per-worker. Pruning now happens when there are more than 5000 keys (OK)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Mobile 390x844 portrait scene", "issues": ["Minor: the stage is now 484px (calc(100vh-360px)) instead of about 500px (aspect cap) before, so 'unchanged' is not exactly true. This is cosmetic only: no scroll, and the story panel is 184px."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_share.py", "/app/backend/tests/test_share_ratelimit.py", "/app/test_reports/pytest/pytest_results.xml", "/app/test_reports/pytest/pytest_results_share.xml"],
+  "action_items": [
+    "HIGH: in share_unlock, derive the client IP from a fixed trusted hop (xff[-3] in this preview: CF worker -> Cloudflare -> Google LB); make the hop count configurable via env and fall back to request.client.host. Today xff[-1] is the constant LB IP 34.8.246.104, so 5 wrong attempts by anyone lock out all guests of a link for 15 minutes.",
+    "LOW: run bcrypt.checkpw/hashpw in asyncio.to_thread"
+  ],
+  "critical_code_review_comments": [
+    "server.py share_unlock: ip = xff[-1] cannot be spoofed, but it is the ingress/LB IP (constant) here, so per-IP == per-token.",
+    "The success path pops only the per-IP key, not the per-token counter. That is acceptable, but successful guests do not reset the global counter.",
+    "set_share: the version bump on disable is correct (only on a true->false transition). Enabled=true without a change does not bump; verified.",
+    "ShareSettings.tsx: the regenerate and copy try/catch blocks are correct."
+  ],
+  "updated_files": ["/app/backend/tests/test_share.py (removed the XFF-spoof-dependent rate-limit tests; test_14 now expects 401 after off/on)", "/app/backend/tests/test_share_ratelimit.py (new)", "server.py: a temporary debug print was added to inspect XFF and then REMOVED (git shows server.py unmodified)"],
+  "success_rate": {"backend": "100% (23/23 share, 90/91 full regression with 1 skip); 1 HIGH design issue in IP derivation", "frontend": "100% of tested flows"},
+  "seed_data_creation": "Created TEST_T1 Share, TEST_T1 RL XFF, TEST_T1 RL Cap, TEST_T1 Share UI x2 and all deleted by id. The sample project's share field is still absent. No TEST_T1 projects remain.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Rate-limit state is in-memory: restart the backend for a clean slate. All external requests from this pod share egress IP 136.70.105.25 (the browser tool too), so a cross-client DoS cannot be shown end-to-end; the evidence is the XFF chain. Per-token cap tests use http://localhost:8001 with a controlled XFF to simulate distinct trusted hops. After the IP-derivation fix, update test_share_ratelimit.py: through the public URL, rotating spoofed values should still get 429 after 5, and the internal-port test should send 3-hop XFF values. setup_share_ui.py creates a UI project (pw TEST1234); delete it with 'del <pid>'. Clerk tickets are single-use (ticket.py)."
+}

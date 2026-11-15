@@ -546,7 +546,7 @@ async def set_share(pid: str, body: ShareIn, member: dict = Depends(staff_only))
         raise HTTPException(404, "Proyek tidak ditemukan")
     s = dict(p.get("share") or {})
     if body.password:
-        s["password_hash"] = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+        s["password_hash"] = (await asyncio.to_thread(bcrypt.hashpw, body.password.encode(), bcrypt.gensalt())).decode()
         s["version"] = int(s.get("version") or 0) + 1
     if body.enabled and not s.get("password_hash"):
         raise HTTPException(400, "Buat password dulu sebelum mengaktifkan link")
@@ -586,7 +586,8 @@ async def share_meta(token: str):
 async def share_unlock(token: str, body: UnlockIn, request: Request):
     p = await _shared_project(token)
     xff = [x.strip() for x in (request.headers.get("x-forwarded-for") or "").split(",") if x.strip()]
-    ip = xff[-1] if xff else (request.client.host if request.client else "")
+    hops = int(os.environ.get("TRUSTED_PROXY_HOPS", "3"))
+    ip = xff[-hops] if len(xff) >= hops else (xff[0] if xff else (request.client.host if request.client else ""))
     key, now = f"{token}:{ip}", time.time()
     if len(_share_attempts) > 5000:
         for k in [k for k, v in _share_attempts.items() if not v or now - v[-1] > 900]:
@@ -596,7 +597,7 @@ async def share_unlock(token: str, body: UnlockIn, request: Request):
     if len(recent) >= 5 or len(token_recent) >= 20:
         raise HTTPException(429, "Terlalu banyak percobaan. Coba lagi dalam 15 menit.")
     s = p["share"]
-    if not bcrypt.checkpw(body.password.encode(), s["password_hash"].encode()):
+    if not await asyncio.to_thread(bcrypt.checkpw, body.password.encode(), s["password_hash"].encode()):
         _share_attempts[key] = recent + [now]
         _share_attempts[token] = token_recent + [now]
         raise HTTPException(401, "Password salah")

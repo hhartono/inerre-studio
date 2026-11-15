@@ -1,4 +1,4 @@
-# INERRE iteration_8: guest share links (secret link + password), staff share settings, public guest endpoints
+# INERRE iteration_8/9 (rate-limit tests moved to test_share_ratelimit.py): guest share links (secret link + password), staff share settings, public guest endpoints
 import uuid
 
 import jwt as pyjwt
@@ -129,21 +129,6 @@ class TestShare:
         # access for token A not usable on other token
         assert view("othertoken123", self.state["access"]).status_code == 404
 
-    def test_11_rate_limit(self):
-        tok, ip = self.state["tok"], f"10.7.{uuid.uuid4().int % 250}.2"
-        codes = [unlock(tok, "badpass", ip).status_code for _ in range(5)]
-        assert codes == [401] * 5, codes
-        r = unlock(tok, "TEST1234", ip)
-        assert r.status_code == 429, r.status_code
-        self.state["rl_ip"] = ip
-
-    def test_12_rate_limit_xff_bypass(self):
-        """Security probe: does a spoofed X-Forwarded-For bypass the limit? (report-only)"""
-        tok = self.state["tok"]
-        r = unlock(tok, "TEST1234", f"10.6.{uuid.uuid4().int % 250}.3")
-        print("XFF-spoof unlock after lockout of other ip ->", r.status_code)
-        assert r.status_code in (200, 429)
-
     def test_13_change_password_invalidates(self, designer):
         pid, tok = self.state["pid"], self.state["tok"]
         r = designer.put(f"/api/projects/{pid}/share", json={"enabled": True, "password": "NEWPASS99"})
@@ -164,6 +149,14 @@ class TestShare:
         assert unlock(tok, "NEWPASS99", "10.4.0.1").status_code == 404
         r = designer.put(f"/api/projects/{pid}/share", json={"enabled": True})
         assert r.status_code == 200 and r.json()["enabled"] is True and r.json()["token"] == tok
+        # iteration_9: disabling bumps version -> old guest access revoked even after re-enable
+        assert view(tok, self.state["access"]).status_code == 401
+        r = unlock(tok, "NEWPASS99")
+        assert r.status_code == 200
+        self.state["access"] = r.json()["access"]
+        assert view(tok, self.state["access"]).status_code == 200
+        # toggling enabled=True while already enabled must NOT bump version
+        assert designer.put(f"/api/projects/{pid}/share", json={"enabled": True}).status_code == 200
         assert view(tok, self.state["access"]).status_code == 200
 
     def test_15_regenerate(self, designer):
