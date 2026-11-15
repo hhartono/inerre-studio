@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 15: AI title and description in English. Backend passed 11/11 (test_ai_describe.py plus test_ai_patch.py, 3 LLM calls). Upload of 'living_room-final.jpg' starts with the title 'living room final'. The background task then sets the title to 'Living Room Final' (Title Case) and fills an English description of 41 words with description_ai=true. POST /describe returns exactly {title, description}. With the title 'IMG 2034' it suggested 'Living Room Overview' and an English description of about 40 words, and nothing was saved. Client gets 403, unauthenticated gets 401, a missing scene gets 404. If the title is changed while the AI is still pending, the user's title is kept. Studio UI at 1920: after uploading 'kitchen_island-v2.jpg', I edited the title (unsaved) at 1.4s. At 13.4s the re-fetch brought the description into the form while the edited title stayed (dirty-field merge works). The saved server title became 'Lounge Seating View'. Clicking generate shows 'Menulis…', fills both the title and description inputs in English (45 words), and shows the toast 'Judul & deskripsi dibuat. Klik Simpan untuk menyimpan.'. Save then reload keeps both. Client viewer, sample project: Revisi 06, story-title 'Living Room Overview' and 'Sofa and Reading Corner', English descriptions; all 6 scenes have Title Case titles and 40-43 word descriptions (read only). One mismatch with the request: the button label was not changed.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ScenePanel generate button", "issue": "The label is still 'Buat dengan AI' / 'Tulis ulang dengan AI' (ScenePanel.tsx:105). It should be 'Buat judul & deskripsi (AI)' / 'Tulis ulang judul & deskripsi (AI)'.", "selector": "[data-testid=scene-generate-description-btn]", "priority": "MEDIUM"},
+      {"component": "ScenePanel generate uses the saved title", "issue": "POST /describe reads the title stored on the server, not the unsaved title in the form. Example: I typed 'kitchen island' (not saved) and clicked generate. The result was 'Lounge Seating View' and my typed title was overwritten. To let the AI tidy what the user just typed, send form.title in the request body (for example {title}) and use it in write_description. Also, the button label depends on form.description only.", "selector": "[data-testid=scene-title-input]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_ai_describe.py", "/app/backend/tests/test_ai_patch.py", "/app/test_reports/pytest/pytest_ai_title.xml"],
+  "action_items": [
+    "Change the scene-generate-description-btn label to 'Buat judul & deskripsi (AI)' / 'Tulis ulang judul & deskripsi (AI)'.",
+    "Optional: send the current form title in POST /scenes/{sid}/describe so the AI cleans up the unsaved title the user typed."
+  ],
+  "critical_code_review_comments": [
+    "AI title is a judgement call: for 'kitchen_island-v2.jpg' on a living-room render the model ignored 'kitchen island' and suggested 'Lounge Seating View'. For 'living_room-final' it kept the filename word 'Final' ('Living Room Final'). Consider asking the prompt to drop words like final, v2 or rev.",
+    "write_description is annotated -> str but returns a dict. Fix the type hint.",
+    "auto_describe's title update is conditional on the title being unchanged, so it correctly does not overwrite a user's title. Verified."
+  ],
+  "updated_files": ["/app/backend/tests/test_ai_describe.py", "/app/backend/tests/test_ai_patch.py"],
+  "success_rate": {"backend": "100%", "frontend": "90%"},
+  "seed_data_creation": "TEST_AI Describe, TEST_AI Patch and TEST_AI Title UI projects were created and deleted. No TEST_ projects remain. The sample project was only read.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with -n0. Tests use is_english() and is_title_case() helpers from test_ai_describe.py. Sign-in tickets are single-use (ticket.py <role>). The UI merge test: upload through upload-renders-{rid}-input, edit the title within about 2s, and the description arrives at about 13s. In total 5 LLM calls this iteration (3 backend, 2 UI)."
+}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Maximize2, Map as MapIcon, Music2, Pause, Play, VolumeX } from "lucide-react";
+import { ChevronLeft, ChevronRight, Maximize2, Minimize2, Map as MapIcon, Music2, Pause, Play, VolumeX } from "lucide-react";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { img, pad } from "@/lib/api";
 import type { ViewMaps } from "@/lib/viewer";
@@ -127,9 +127,29 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
     if (data.music_url) setMusicOn(next);
   };
 
+  const [nativeFs, setNativeFs] = useState(false);
+  const [pseudoFs, setPseudoFs] = useState(false);
+  const [fsPlan, setFsPlan] = useState(true);
+  const isFs = nativeFs || pseudoFs;
+  useEffect(() => {
+    const onFs = () => setNativeFs(!!stageRef.current && document.fullscreenElement === stageRef.current);
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPseudoFs(false);
+    };
+    document.addEventListener("fullscreenchange", onFs);
+    window.addEventListener("keydown", onEsc);
+    return () => {
+      document.removeEventListener("fullscreenchange", onFs);
+      window.removeEventListener("keydown", onEsc);
+    };
+  }, []);
+
   const toggleFs = () => {
-    if (document.fullscreenElement) document.exitFullscreen();
-    else stageRef.current?.requestFullscreen?.();
+    if (document.fullscreenElement) return void document.exitFullscreen();
+    if (pseudoFs) return setPseudoFs(false);
+    const el = stageRef.current;
+    if (el?.requestFullscreen) el.requestFullscreen().catch(() => setPseudoFs(true));
+    else setPseudoFs(true);
   };
 
   return (
@@ -137,7 +157,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
       <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div
           ref={stageRef}
-          className="relative h-[var(--stage-h)] shrink-0 overflow-hidden bg-ink transition-[height] duration-500 md:h-auto md:flex-1 short:h-auto short:flex-1"
+          className={`relative h-[var(--stage-h)] shrink-0 overflow-hidden bg-ink transition-[height] duration-500 md:h-auto md:flex-1 short:h-auto short:flex-1 ${pseudoFs ? "!fixed !inset-0 !z-[100] !h-[100dvh]" : ""}`}
           style={{ "--stage-h": `min(62vh, max(48vh, calc(100vh - 360px)), calc((100vw - 16px) / ${scene.aspect || 1.5} + 52px))` } as React.CSSProperties}
           onTouchStart={(e) => (touchX.current = e.touches[0].clientX)}
           onTouchEnd={(e) => {
@@ -165,12 +185,18 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               <button onClick={togglePlay} className={iconBtn} title={playing ? "Jeda" : "Putar tur"} data-testid="autoplay-toggle-btn">
                 {playing ? <Pause size={15} /> : <Play size={15} />}
               </button>
-              <button onClick={toggleFs} className={iconBtn} title="Layar penuh" data-testid="fullscreen-btn">
-                <Maximize2 size={15} />
+              <button onClick={toggleFs} className={iconBtn} title={isFs ? "Keluar layar penuh" : "Layar penuh"} data-testid="fullscreen-btn" data-fs={isFs ? "on" : "off"}>
+                {isFs ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
               </button>
-              <button onClick={() => setSheet(true)} className={`${iconBtn} md:hidden short:hidden`} title="Denah" data-testid="mobile-denah-btn">
-                <MapIcon size={15} />
-              </button>
+              {isFs && floor?.plan_url ? (
+                <button onClick={() => setFsPlan((v) => !v)} className={`${iconBtn} ${fsPlan ? "text-brass" : ""}`} title={fsPlan ? "Sembunyikan denah" : "Tampilkan denah"} data-testid="fs-plan-toggle-btn">
+                  <MapIcon size={15} />
+                </button>
+              ) : (
+                <button onClick={() => setSheet(true)} className={`${iconBtn} md:hidden short:hidden`} title="Denah" data-testid="mobile-denah-btn">
+                  <MapIcon size={15} />
+                </button>
+              )}
             </div>
           </div>
           <div className="absolute inset-0 px-2 pb-1 pt-12 md:px-16 md:pb-6 md:pt-[72px] short:px-14 short:pb-1.5 short:pt-1.5">
@@ -178,6 +204,12 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               <StageImage scene={scene} valid={valid} onGo={goTo} />
             </div>
           </div>
+          {isFs && fsPlan && floor?.plan_url && (
+            <div onClick={(e) => e.stopPropagation()} onTouchStart={(e) => e.stopPropagation()} onTouchEnd={(e) => e.stopPropagation()} className="glass fade-up absolute right-2 top-12 z-30 w-[38vw] max-w-[300px] p-2 md:right-[84px] md:top-[72px] md:w-[22vw] short:w-[26vw] short:max-w-[200px]" data-testid="fs-mini-plan">
+              <p className="eyebrow mb-1.5 truncate text-[8.5px] text-paper/60">{floor.name}</p>
+              <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact numbers={maps.number} onSelect={goTo} />
+            </div>
+          )}
           <button onClick={(e) => { e.stopPropagation(); go(-1); }} className={`${iconBtn} absolute left-2 top-1/2 z-20 -translate-y-1/2 md:left-6 md:h-12 md:w-12`} data-testid="prev-scene-btn">
             <ChevronLeft size={18} />
           </button>
@@ -227,7 +259,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
               {pad(index + 1)} <span className="text-paper/35">/ {pad(tour.length)}</span>
             </p>
             <h2 className="display mt-2 text-xl leading-snug md:mt-4 md:text-[28px]" data-testid="story-title">{scene.title || "Tanpa judul"}</h2>
-            {scene.description && <p className="mt-3 whitespace-pre-line text-[15px] leading-7 text-paper/70 md:mt-4 md:text-sm md:leading-relaxed md:text-paper/65" data-testid="story-description">{scene.description}</p>}
+            {scene.description && <p className="mt-4 hidden whitespace-pre-line text-sm leading-relaxed text-paper/65 md:block" data-testid="story-description">{scene.description}</p>}
           </div>
           {musicOn && data.music_title && (
             <p className="eyebrow mt-6 text-[9px] text-paper/45" data-testid="music-credit">Musik: {data.music_title}</p>
@@ -238,7 +270,7 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
                 <p className="eyebrow text-paper/45">{floor.name}</p>
                 <button onClick={() => setSheet(true)} className="eyebrow text-[9px] text-brass md:hidden" data-testid="mini-plan-expand-btn">Perbesar</button>
               </div>
-              <div className="w-[62%] max-w-[260px] md:w-full md:max-w-none">
+              <div className="w-full max-w-[420px] md:max-w-none">
                 <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact numbers={maps.number} onSelect={goTo} />
               </div>
             </div>

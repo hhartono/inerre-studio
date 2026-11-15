@@ -838,22 +838,16 @@ async def create_scene(rid: str, file: UploadFile = File(...), member: dict = De
     await get_project(r["project_id"], member)
     up = await save_upload(file, r["project_id"], "render")
     order = await db.scenes.count_documents({"room_id": rid})
-    title = Path(file.filename or "").stem.replace("_", " ").replace("-", " ").strip()[:80]
+    title = " ".join(Path(file.filename or "").stem.replace("_", " ").replace("-", " ").split()).title()[:80]
     doc = {"id": new_id(), "project_id": r["project_id"], "floor_id": r["floor_id"], "room_id": rid, "title": title,
            "description": "", "area": "", "image_file_id": up["id"], "aspect": up["aspect"], "order": order,
            "hotspots": [], "camera": None, "hotspots_need_check": False, "created_at": now_iso()}
     await db.scenes.insert_one({**doc})
     await db.projects.update_one({"id": r["project_id"]}, {"$push": {"tour_order": doc["id"]}, "$set": {"updated_at": now_iso()}})
-    task = asyncio.create_task(auto_describe(doc["id"]))
-    _bg_tasks.add(task)
-    task.add_done_callback(_bg_tasks.discard)
     return with_urls([], [doc])[1][0]
 
 
-_bg_tasks: set = set()
-
-
-async def write_description(scene: dict) -> str:
+async def write_description(scene: dict) -> dict:
     from emergentintegrations.llm.chat import ImageContent, LlmChat, StreamDone, TextDelta, UserMessage
     f = await db.files.find_one({"id": scene["image_file_id"]}, {"_id": 0, "paths": 1})
     data = await run_in_threadpool(storage.get_object, f["paths"]["thumb"])
@@ -865,7 +859,7 @@ async def write_description(scene: dict) -> str:
     title = f' currently titled "{scene["title"]}"' if scene.get("title") else ""
     prompt = (f"This is a render of the room \"{room.get('name', '')}\"{title}. Reply with JSON only: "
               '{"title": "...", "description": "..."}. '
-              "title: 2-5 words in English Title Case; clean up the current title's casing and wording if it is meaningful, "
+              "title: 2-5 words in English Title Case; clean up the current title's casing and wording if it is meaningful (drop file words like final, v2, rev, img, render), "
               "otherwise suggest a fitting one (e.g. 'Living Room Overview'). "
               "description: one English paragraph, max 45 words, naming visible materials, colours, lighting and mood. No emoji, no quotes.")
     out = []
@@ -884,24 +878,16 @@ async def write_description(scene: dict) -> str:
     return {"title": str(parsed.get("title") or "").strip()[:80], "description": str(parsed.get("description") or (raw if not m else "")).strip()}
 
 
-async def auto_describe(sid: str):
-    try:
-        scene = await db.scenes.find_one({"id": sid}, {"_id": 0})
-        if not scene:
-            return
-        res = await write_description(scene)
-        if res["title"]:
-            await db.scenes.update_one({"id": sid, "title": scene.get("title", "")}, {"$set": {"title": res["title"]}})
-        if res["description"] and not scene.get("description"):
-            await db.scenes.update_one({"id": sid, "description": ""}, {"$set": {"description": res["description"], "description_ai": True}})
-    except Exception as e:  # noqa: BLE001
-        logger.error(f"Auto description failed for {sid}: {e}")
+class DescribeIn(BaseModel):
+    title: Optional[str] = None
 
 
 @api.post("/scenes/{sid}/describe")
-async def describe_scene(sid: str, member: dict = Depends(staff_only)):
+async def describe_scene(sid: str, body: DescribeIn = DescribeIn(), member: dict = Depends(staff_only)):
     s = await get_doc("scenes", sid)
     await get_project(s["project_id"], member)
+    if body.title is not None:
+        s = {**s, "title": body.title.strip()[:80]}
     try:
         res = await write_description(s)
     except Exception as e:  # noqa: BLE001

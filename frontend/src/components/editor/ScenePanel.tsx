@@ -15,7 +15,7 @@ export function ScenePanel({ scene }: { scene: Scene }) {
   const generate = async () => {
     setAiBusy(true);
     try {
-      const { data: r } = await api.post(`/scenes/${scene.id}/describe`, {}, { timeout: 120000 });
+      const { data: r } = await api.post(`/scenes/${scene.id}/describe`, { title: form.title }, { timeout: 120000 });
       setForm((f) => ({ ...f, description: r.description || f.description, title: r.title || f.title }));
       toast.success("Judul & deskripsi dibuat. Klik Simpan untuk menyimpan.");
     } catch (e) {
@@ -102,11 +102,10 @@ export function ScenePanel({ scene }: { scene: Scene }) {
             <div className="flex items-center justify-between gap-3">
               <Label>Deskripsi</Label>
               <button onClick={generate} disabled={!!aiBusy} className="eyebrow mb-2.5 inline-flex items-center gap-2 text-[9.5px] text-brass transition-opacity hover:opacity-80 disabled:opacity-50" data-testid="scene-generate-description-btn">
-                <Sparkles size={12} /> {aiBusy ? "Menulis…" : form.description ? "Tulis ulang dengan AI" : "Buat dengan AI"}
+                <Sparkles size={12} /> {aiBusy ? "Menulis…" : form.description ? "Tulis ulang judul & deskripsi (AI)" : "Buat judul & deskripsi (AI)"}
               </button>
             </div>
             <textarea rows={5} className={inputCls} value={form.description} onChange={set("description")} data-testid="scene-description-input" />
-            {scene.description_ai && form.description === scene.description && <p className="mt-2 text-xs text-paper/40" data-testid="scene-description-ai-note">Deskripsi awal dibuat otomatis oleh AI. Silakan sunting.</p>}
           </div>
           <div>
             <Label>Ruangan</Label>

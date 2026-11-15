@@ -1,7 +1,7 @@
 # PATCH /scenes/{sid} vs AI default description: title-only patch keeps AI text, same text keeps flag, edited text clears description_ai
 import time
 
-from test_ai_describe import real_jpeg
+from test_ai_describe import is_english, real_jpeg
 
 
 class TestAiPatch:
@@ -28,7 +28,8 @@ class TestAiPatch:
                 break
         assert sc["description"], "AI description not filled"
         assert sc["description_ai"] is True
-        assert sc["title"] == "TEST_Judul"
+        assert sc["title"] == "TEST_Judul"  # AI title must not overwrite a user-changed title
+        assert is_english(sc["description"]), sc["description"]
         self.state["auto"] = sc["description"]
 
     def test_02_patch_same_description_keeps_flag(self, designer):
