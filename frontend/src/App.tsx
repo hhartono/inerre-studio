@@ -10,6 +10,7 @@ import StudioProjects from "@/pages/StudioProjects";
 import AdminUsers from "@/pages/AdminUsers";
 import ViewerPage from "@/pages/ViewerPage";
 import EditorPage from "@/pages/EditorPage";
+import SharePage from "@/pages/SharePage";
 
 const STAFF = ["admin", "designer"];
 const ALL = ["admin", "designer", "client"];
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/studio" element={<RequireRole roles={STAFF}><StudioProjects /></RequireRole>} />
             <Route path="/studio/:projectId" element={<RequireRole roles={STAFF}><EditorPage /></RequireRole>} />
             <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminUsers /></RequireRole>} />
+            <Route path="/s/:token" element={<SharePage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </MeProvider>

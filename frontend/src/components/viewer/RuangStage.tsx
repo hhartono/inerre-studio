@@ -119,8 +119,8 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
   };
 
   return (
-    <div className="flex flex-col md:h-[calc(100dvh-65px)] short:h-[calc(100dvh-45px)]" data-testid="ruang-view" data-wakelock={wake ? "on" : "off"}>
-      <div className="flex flex-col md:min-h-0 md:flex-1 md:flex-row short:min-h-0 short:flex-1">
+    <div className="flex min-h-0 flex-1 flex-col" data-testid="ruang-view" data-wakelock={wake ? "on" : "off"}>
+      <div className="flex min-h-0 flex-1 flex-col md:flex-row">
         <div
           ref={stageRef}
           className="relative h-[var(--stage-h)] shrink-0 overflow-hidden bg-ink transition-[height] duration-500 md:h-auto md:flex-1 short:h-auto short:flex-1"
@@ -179,21 +179,26 @@ export function RuangStage({ data, maps, tour, index, setIndex, musicOn, setMusi
           </div>
         </div>
 
-        <aside className="px-5 py-4 md:flex md:w-[380px] md:flex-col md:overflow-y-auto md:border-l md:border-paper/10 md:px-8 md:py-10 short:hidden" data-testid="story-panel">
+        <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 py-5 md:w-[380px] md:flex-none md:border-l md:border-paper/10 md:px-8 md:py-10 short:hidden" data-testid="story-panel">
           <div key={scene.id} className="fade-up">
             <p className="eyebrow text-brass" data-testid="story-number">
               {pad(index + 1)} <span className="text-paper/35">/ {pad(tour.length)}</span>
             </p>
             <h2 className="display mt-2 text-xl leading-snug md:mt-4 md:text-[28px]" data-testid="story-title">{scene.title || "Tanpa judul"}</h2>
-            {scene.description && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-paper/65 md:mt-4" data-testid="story-description">{scene.description}</p>}
+            {scene.description && <p className="mt-3 whitespace-pre-line text-[15px] leading-7 text-paper/70 md:mt-4 md:text-sm md:leading-relaxed md:text-paper/65" data-testid="story-description">{scene.description}</p>}
           </div>
           {musicOn && data.music_title && (
             <p className="eyebrow mt-6 text-[9px] text-paper/45" data-testid="music-credit">Musik: {data.music_title}</p>
           )}
           {floor?.plan_url && (
-            <div className="mt-auto hidden pt-10 md:block" data-testid="mini-plan">
-              <p className="eyebrow mb-3 text-paper/45">{floor.name}</p>
-              <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact numbers={maps.number} onSelect={goTo} />
+            <div className="mt-auto pt-6 md:pt-10" data-testid="mini-plan">
+              <div className="mb-2 flex items-center justify-between gap-3 md:mb-3">
+                <p className="eyebrow text-paper/45">{floor.name}</p>
+                <button onClick={() => setSheet(true)} className="eyebrow text-[9px] text-brass md:hidden" data-testid="mini-plan-expand-btn">Perbesar</button>
+              </div>
+              <div className="w-[62%] max-w-[260px] md:w-full md:max-w-none">
+                <PlanView floor={floor} scenes={floorScenes} activeId={scene.id} compact numbers={maps.number} onSelect={goTo} />
+              </div>
             </div>
           )}
         </aside>

@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { api, errMsg, pad } from "@/lib/api";
 import { useEditor } from "@/components/editor/EditorContext";
 import { MusicPicker } from "@/components/editor/MusicPicker";
+import { ShareSettings } from "@/components/editor/ShareSettings";
 import { Label, Section, btn, btnDanger, btnGhost, inputCls } from "@/components/editor/ui";
 
 function FileButton({ label, accept, onFile, busy, testid }: { label: string; accept: string; onFile: (f: File) => void; busy?: boolean; testid: string }) {
@@ -103,6 +104,7 @@ export function ProjectSettings() {
       <button onClick={save} className={`${btn} mt-8`} data-testid="project-settings-save-btn">Simpan</button>
 
       <div className="mt-10">
+        <ShareSettings />
         <MediaSettings />
       </div>
 

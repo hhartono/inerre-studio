@@ -15,7 +15,13 @@ const hashIndex = () => {
   return m ? parseInt(m[1], 10) - 1 : 0;
 };
 
-export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
+interface Share {
+  token: string;
+  access: string;
+  onExpired: () => void;
+}
+
+export default function ViewerPage({ mode, share }: { mode: "draft" | "published"; share?: Share }) {
   const { projectId } = useParams();
   const { me } = useMe();
   const [data, setData] = useState<ViewData | null>(null);
@@ -36,14 +42,19 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
   }, [musicOn]);
 
   useEffect(() => {
-    api
-      .get(`/projects/${projectId}/view`, { params: { mode } })
+    const req = share
+      ? api.get(`/share/${share.token}/view`, { headers: { "X-Share-Access": share.access } })
+      : api.get(`/projects/${projectId}/view`, { params: { mode } });
+    req
       .then((r) => {
         setData(r.data);
         setIndexRaw(Math.max(0, Math.min(r.data.tour_order.length - 1, hashIndex())));
       })
-      .catch((e) => setError(errMsg(e)));
-  }, [projectId, mode]);
+      .catch((e) => {
+        if (share && e?.response?.status === 401) share.onExpired();
+        else setError(errMsg(e));
+      });
+  }, [projectId, mode, share]);
 
   const maps = useMemo(() => (data ? buildMaps(data) : null), [data]);
   const tour = useMemo(() => tourScenes(data, maps), [data, maps]);
@@ -62,7 +73,7 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
   }, [tour.length]);
 
   const staff = me && ["admin", "designer"].includes(me.role);
-  const backTo = mode === "draft" ? `/studio/${projectId}` : staff ? "/studio" : "/projects";
+  const backTo = share ? null : mode === "draft" ? `/studio/${projectId}` : staff ? "/studio" : "/projects";
 
   if (error) {
     return (
@@ -82,7 +93,7 @@ export default function ViewerPage({ mode }: { mode: "draft" | "published" }) {
   };
 
   return (
-    <div className={`bg-ink text-paper ${tab === "denah" ? "flex h-[100dvh] flex-col overflow-hidden" : "min-h-screen"}`} data-testid="viewer-page">
+    <div className="flex h-[100dvh] flex-col overflow-x-hidden bg-ink text-paper" style={{ overflowY: tab === "pdf" ? "auto" : "hidden" }} data-testid="viewer-page">
       <Masthead data={data} tab={tab} setTab={setTab} backTo={backTo} />
       {tab === "ruang" &&
         (tour.length ? (

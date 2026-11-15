@@ -10,15 +10,17 @@ const ALL_TABS: { id: ViewerTab; label: string }[] = [
   { id: "pdf", label: "Presentasi" },
 ];
 
-export function Masthead({ data, tab, setTab, backTo }: { data: ViewData; tab: ViewerTab; setTab: (t: ViewerTab) => void; backTo: string }) {
+export function Masthead({ data, tab, setTab, backTo }: { data: ViewData; tab: ViewerTab; setTab: (t: ViewerTab) => void; backTo: string | null }) {
   const badge = data.mode === "draft" ? "Preview · Draft" : `Revisi ${pad(data.revision?.number || 0)}`;
   const TABS = ALL_TABS.filter((t) => t.id !== "pdf" || data.pdf_pages?.length);
   return (
     <header className="sticky top-0 z-50 border-b border-paper/10 bg-ink/85 backdrop-blur-xl" data-testid="viewer-masthead">
       <div className="flex h-14 items-center gap-4 px-4 md:h-16 md:gap-8 md:px-8 short:h-11">
-        <Link to={backTo} className="text-paper/50 transition-colors hover:text-brass" title="Kembali" data-testid="viewer-back-link">
-          <ArrowLeft size={16} />
-        </Link>
+        {backTo && (
+          <Link to={backTo} className="text-paper/50 transition-colors hover:text-brass" title="Kembali" data-testid="viewer-back-link">
+            <ArrowLeft size={16} />
+          </Link>
+        )}
         <span className="eyebrow text-[11px] tracking-[0.42em]">INERRE</span>
         <span className="hidden h-4 w-px bg-paper/15 md:block" />
         <p className="min-w-0 flex-1 truncate text-sm text-paper/80 md:flex-none" data-testid="viewer-project-name">{data.project.name}</p>

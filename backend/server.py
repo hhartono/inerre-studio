@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import secrets
+import time
 import os
 import uuid
 from datetime import datetime, timezone
@@ -12,7 +14,9 @@ from dotenv import load_dotenv
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
 
-from fastapi import APIRouter, Depends, FastAPI, File, HTTPException, Query, Request, Response, UploadFile  # noqa: E402
+import bcrypt  # noqa: E402
+import jwt  # noqa: E402
+from fastapi import APIRouter, Depends, FastAPI, File, Header, HTTPException, Query, Request, Response, UploadFile  # noqa: E402
 from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from pymongo import ReturnDocument  # noqa: E402
@@ -199,7 +203,7 @@ class BacklinkIn(BaseModel):
 
 # ---------- helpers ----------
 async def get_project(pid: str, member: dict, staff: bool = False) -> dict:
-    p = await db.projects.find_one({"id": pid}, {"_id": 0})
+    p = await db.projects.find_one({"id": pid}, {"_id": 0, "share": 0})
     if not p:
         raise HTTPException(404, "Proyek tidak ditemukan")
     if member["role"] in STAFF:
@@ -211,7 +215,7 @@ async def get_project(pid: str, member: dict, staff: bool = False) -> dict:
 
 
 async def get_doc(coll: str, doc_id: str) -> dict:
-    d = await db[coll].find_one({"id": doc_id}, {"_id": 0})
+    d = await db[coll].find_one({"id": doc_id}, {"_id": 0, "share": 0} if coll == "projects" else {"_id": 0})
     if not d:
         raise HTTPException(404, "Tidak ditemukan")
     return d
@@ -369,7 +373,7 @@ async def list_projects(member: dict = Depends(current_member)):
         q = {"client_emails": {"$in": member.get("emails", [])}, "published_revision": {"$gt": 0}}
     else:
         return []
-    items = await db.projects.find(q, {"_id": 0}).sort("updated_at", -1).to_list(500)
+    items = await db.projects.find(q, {"_id": 0, "share": 0}).sort("updated_at", -1).to_list(500)
     if member["role"] == "client":
         for p in items:
             rev = await db.revisions.find_one({"project_id": p["id"], "number": p["published_revision"]}, {"_id": 0, "snapshot.scenes": 1})
@@ -488,16 +492,121 @@ async def view_project(pid: str, mode: str = "published", member: dict = Depends
         tour, revision = p.get("tour_order"), None
         media = media_urls(project_music(p), p.get("pdf"))
     else:
-        rev = await db.revisions.find_one({"project_id": pid, "number": p.get("published_revision", 0)}, {"_id": 0})
-        if not rev:
-            raise HTTPException(404, "Proyek belum dipublikasikan")
-        snap = rev["snapshot"]
-        floors, rooms, scenes, tour = snap["floors"], snap["rooms"], snap["scenes"], snap["tour_order"]
-        revision = {"number": rev["number"], "published_at": rev["published_at"]}
-        media = media_urls(snapshot_music(snap), snap.get("pdf"))
+        return await published_view(p)
     fl, sc = with_urls(floors, scenes)
     return {"project": {"id": p["id"], "name": p["name"], "code": p.get("code", "")}, "mode": mode, "revision": revision, **media,
             "floors": fl, "rooms": rooms, "scenes": sc, "tour_order": effective_tour(tour, floors, rooms, scenes)}
+
+
+async def published_view(p: dict) -> dict:
+    rev = await db.revisions.find_one({"project_id": p["id"], "number": p.get("published_revision", 0)}, {"_id": 0})
+    if not rev:
+        raise HTTPException(404, "Proyek belum dipublikasikan")
+    snap = rev["snapshot"]
+    floors, rooms, scenes, tour = snap["floors"], snap["rooms"], snap["scenes"], snap["tour_order"]
+    fl, sc = with_urls(floors, scenes)
+    return {"project": {"id": p["id"], "name": p["name"], "code": p.get("code", "")}, "mode": "published",
+            "revision": {"number": rev["number"], "published_at": rev["published_at"]},
+            **media_urls(snapshot_music(snap), snap.get("pdf")),
+            "floors": fl, "rooms": rooms, "scenes": sc, "tour_order": effective_tour(tour, floors, rooms, scenes)}
+
+
+# ---------- share links (guest access: secret link + password) ----------
+SHARE_TTL = 12 * 3600
+_share_attempts: dict = {}
+
+
+class ShareIn(BaseModel):
+    enabled: bool = True
+    password: Optional[str] = Field(None, min_length=4, max_length=64)
+
+
+class UnlockIn(BaseModel):
+    password: str = Field(min_length=1, max_length=64)
+
+
+def share_info(p: dict) -> dict:
+    s = p.get("share") or {}
+    return {"enabled": bool(s.get("enabled")), "token": s.get("token"), "has_password": bool(s.get("password_hash")),
+            "updated_at": s.get("updated_at")}
+
+
+@api.get("/projects/{pid}/share")
+async def get_share(pid: str, member: dict = Depends(staff_only)):
+    p = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Proyek tidak ditemukan")
+    return share_info(p)
+
+
+@api.put("/projects/{pid}/share")
+async def set_share(pid: str, body: ShareIn, member: dict = Depends(staff_only)):
+    p = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not p:
+        raise HTTPException(404, "Proyek tidak ditemukan")
+    s = dict(p.get("share") or {})
+    if body.password:
+        s["password_hash"] = bcrypt.hashpw(body.password.encode(), bcrypt.gensalt()).decode()
+        s["version"] = int(s.get("version") or 0) + 1
+    if body.enabled and not s.get("password_hash"):
+        raise HTTPException(400, "Buat password dulu sebelum mengaktifkan link")
+    s["token"] = s.get("token") or secrets.token_urlsafe(18)
+    s["enabled"] = body.enabled
+    s["updated_at"] = now_iso()
+    await db.projects.update_one({"id": pid}, {"$set": {"share": s}})
+    return share_info({"share": s})
+
+
+@api.post("/projects/{pid}/share/regenerate")
+async def regenerate_share(pid: str, member: dict = Depends(staff_only)):
+    p = await db.projects.find_one({"id": pid}, {"_id": 0})
+    if not p or not p.get("share"):
+        raise HTTPException(404, "Link belum dibuat")
+    s = {**p["share"], "token": secrets.token_urlsafe(18), "version": int(p["share"].get("version") or 0) + 1, "updated_at": now_iso()}
+    await db.projects.update_one({"id": pid}, {"$set": {"share": s}})
+    return share_info({"share": s})
+
+
+async def _shared_project(token: str) -> dict:
+    p = await db.projects.find_one({"share.token": token, "share.enabled": True}, {"_id": 0})
+    if not p or not p.get("published_revision"):
+        raise HTTPException(404, "Link tidak ditemukan atau sudah tidak aktif")
+    return p
+
+
+@api.get("/share/{token}")
+async def share_meta(token: str):
+    p = await _shared_project(token)
+    return {"project_name": p["name"], "code": p.get("code", "")}
+
+
+@api.post("/share/{token}/unlock")
+async def share_unlock(token: str, body: UnlockIn, request: Request):
+    p = await _shared_project(token)
+    ip = (request.headers.get("x-forwarded-for") or (request.client.host if request.client else "")).split(",")[0].strip()
+    key, now = f"{token}:{ip}", time.time()
+    recent = [t for t in _share_attempts.get(key, []) if now - t < 900]
+    if len(recent) >= 5:
+        raise HTTPException(429, "Terlalu banyak percobaan. Coba lagi dalam 15 menit.")
+    s = p["share"]
+    if not bcrypt.checkpw(body.password.encode(), s["password_hash"].encode()):
+        _share_attempts[key] = recent + [now]
+        raise HTTPException(401, "Password salah")
+    _share_attempts.pop(key, None)
+    claims = {"typ": "share", "tok": token, "pid": p["id"], "v": s.get("version", 0), "exp": int(now) + SHARE_TTL}
+    return {"access": jwt.encode(claims, os.environ["SHARE_TOKEN_SECRET"], algorithm="HS256"), "expires_in": SHARE_TTL}
+
+
+@api.get("/share/{token}/view")
+async def share_view(token: str, x_share_access: str = Header("")):
+    p = await _shared_project(token)
+    try:
+        claims = jwt.decode(x_share_access, os.environ["SHARE_TOKEN_SECRET"], algorithms=["HS256"])
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Masukkan password untuk membuka presentasi")
+    if claims.get("typ") != "share" or claims.get("tok") != token or claims.get("v") != p["share"].get("version", 0):
+        raise HTTPException(401, "Masukkan password untuk membuka presentasi")
+    return await published_view(p)
 
 
 @api.put("/projects/{pid}/tour")
