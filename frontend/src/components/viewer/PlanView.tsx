@@ -44,9 +44,10 @@ export function PlanView({ floor, scenes, activeId, roomId, compact, tiny, numbe
           const rad = (c.angle * Math.PI) / 180;
           const cx = c.x * PLAN_W;
           const cy = c.y * H;
+          const faded = !!activeId && !active;
           return (
-            <g key={`c-${s.id}`} onClick={select(s.id)} className="cursor-pointer" style={{ opacity: dim ? 0.2 : 1, transition: "opacity 0.3s" }}>
-              <path d={conePath(cx, cy, c.angle, c.fov, r)} fill={color} fillOpacity={active ? 0.75 : 0.5} stroke={color} strokeWidth={1.2 * u} data-testid={`plan-cone-${s.id}`} />
+            <g key={`c-${s.id}`} onClick={select(s.id)} className="cursor-pointer" style={{ opacity: dim ? 0.2 : faded ? 0.4 : 1, transition: "opacity 0.3s" }}>
+              <path d={conePath(cx, cy, c.angle, c.fov, r)} fill={color} fillOpacity={active ? 0.8 : faded ? 0.35 : 0.5} stroke={color} strokeWidth={1.2 * u} data-testid={`plan-cone-${s.id}`} />
               <line x1={cx} y1={cy} x2={cx + Math.cos(rad) * r} y2={cy + Math.sin(rad) * r} stroke="#171713" strokeOpacity={0.55} strokeWidth={1 * u} strokeDasharray={`${2.5 * u} ${2.5 * u}`} />
             </g>
           );
@@ -56,8 +57,9 @@ export function PlanView({ floor, scenes, activeId, roomId, compact, tiny, numbe
           const dot = (active ? dotPx * 1.2 : dotPx) * u;
           const cx = c.x * PLAN_W;
           const cy = c.y * H;
+          const faded = !!activeId && !active;
           return (
-            <g key={`d-${s.id}`} onClick={select(s.id)} className="cursor-pointer" style={{ opacity: dim ? 0.25 : 1, transition: "opacity 0.3s" }} data-testid={`plan-pin-${s.id}`}>
+            <g key={`d-${s.id}`} onClick={select(s.id)} className="cursor-pointer" style={{ opacity: dim ? 0.25 : faded ? 0.5 : 1, transition: "opacity 0.3s" }} data-testid={`plan-pin-${s.id}`}>
               <title>{s.title}</title>
               <circle cx={cx} cy={cy} r={dot + (active ? (tiny ? 1.8 : 2.5) : tiny ? 1 : 1.5) * u} fill={active ? "#ffffff" : "#171713"} />
               <circle cx={cx} cy={cy} r={dot} fill={color} />
