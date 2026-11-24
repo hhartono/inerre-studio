@@ -72,7 +72,7 @@ export default function RsMaterial() {
         {m.versions.map((x: any) => (
           <button key={x.id} onClick={() => setVno(x.version_no)} className={`eyebrow border px-3 py-1.5 text-[9.5px] ${x.id === v.id ? "border-brass text-brass" : "border-paper/15 text-paper/50"}`} data-testid={`rs-matv-tab-${x.version_no}`}>v{x.version_no} · {MAT_STATUS[x.status]}</button>
         ))}
-        {isAdmin && <button className="eyebrow ml-2 text-[9.5px] text-paper/50 hover:text-brass" onClick={() => act(() => api.post(`/rs/materials/${m.id}/versions`), "Versi baru dibuat")} data-testid="rs-matv-new-btn">+ Buat versi baru</button>}
+        {isAdmin && m.versions[m.versions.length - 1].status !== "draft" && <button className="eyebrow ml-2 text-[9.5px] text-paper/50 hover:text-brass" onClick={() => act(() => api.post(`/rs/materials/${m.id}/versions`), "Versi baru dibuat")} data-testid="rs-matv-new-btn">+ Buat versi baru</button>}
       </div>
       {!editable && <p className="mb-6 max-w-2xl border-l-2 border-emerald-400/50 pl-3 text-xs text-paper/60" data-testid="rs-matv-locked-note">Versi ini {MAT_STATUS[v.status].toLowerCase()} oleh {v.locked_by || v.approved_by}. Tidak ada feedback proyek, suasana, atau revisi AI yang bisa mengubahnya. Perubahan hanya lewat versi baru oleh admin.</p>}
 

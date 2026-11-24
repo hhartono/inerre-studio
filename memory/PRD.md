@@ -43,10 +43,23 @@ User choices: Phase 1–2 first; watermark INERRE logo only; clients mostly on p
 - Browser tab title "INERRE Presentation System"; INERRE app icon (brass serif I on ink) as favicon/apple-touch/PWA icons; manifest.json makes it installable ("Add to Home Screen", standalone).
 - Fix: thumbnail rail auto-scroll no longer shifts the whole stage sideways (LDG slide 4 bug; replaced scrollIntoView with rail-only scrollTo).
 
+## Render Studio V1 — Phases 1-3 (2026-11-24)
+User request: full "INERRE Render Studio — Architectural Visual Intelligence Engine V1.0" prompt (SketchUp screenshot → photoreal render, material library & calibration, ambience library, live grading, versions, learning engine, QC, cost control, n8n-ready). User choices: separate render projects (not linked to presentation), user's own OPENAI_API_KEY, first stage = Phases 1-3, approved renders downloaded then uploaded manually to presentation, existing roles (admin, designer; clients no access).
+- Backend: `render_studio.py` (router /api/rs), `rs_engine.py` (OpenAI /v1/images/edits via httpx, prompt compiler, region mask + composite), `rs_grade.py` (numpy grading = frontend lib/grade.ts). Mongo collections rs_projects, rs_rooms, rs_angles, rs_renders, rs_materials, rs_material_versions, rs_ambiences, rs_settings, rs_usage, rs_grade_presets.
+- Models (verified on account): draft gpt-image-2.6-flare, final gpt-image-2.6-sunburst, custom admin-set, vision gpt-5.5 (not yet used). No silent fallback.
+- Jobs: asyncio worker (2 concurrent), statuses queued/analyzing/rendering/processing/completed/failed, 409 duplicate guard, restart marks running jobs failed. Budget: monthly + per-project (estimated cost from admin-set token rates).
+- Region revise composites AI output onto parent so pixels outside region are identical; outputs flattened to RGB.
+- Frontend /render/*: Dashboard, Proyek, Render Studio (3-panel: sources/refs with roles/materials/instructions | canvas with render/SketchUp/slider/side-by-side, zoom/pan, fullscreen, region select, version timeline | Render / Warna (live, no AI) / Review & Revisi tabs), Material Library + calibration studio (draft→approve→lock, new versions, corrections, JSON import), Ambience Library (9 presets, versions, rollback), Riwayat (compare 2), Pengaturan (models, budgets, usage).
+- Seeds: MAT-001…MAT-010 (no 007) uncalibrated, 9 ambience presets.
+- Tests: /app/backend/tests/test_render_studio.py, iteration_17 report (15/15 backend).
+
 ## Backlog
+- Render Studio Phase 4: Train & Calibrate learning rules (vision model converts feedback → structured rules, scopes, approval, conflict resolution), intelligent revision classification, persistent project memory rules.
+- Render Studio Phase 5: AI Quality Inspector, admin activity review, n8n signed webhooks, dark/light mode toggle.
+- Render Studio minor: orphan storage files after project delete; N+1 queries on project list.
 - P0 (Phase 3): revision history dropdown (read-only), A/B alternative groups + ALT hotspot, per-room & final approval with locking, pinned comments per revision, Resend emails (publish, comment, approval), watermark removed after approval.
 - P1 (Phase 4): mobile polish (touch tour reorder), deploy, signed URLs bound to user session.
 - P2: 360 renders, split server.py into routers.
 
 ## Next tasks
-Phase 3 build starting with revisions dropdown + approvals.
+User to try Render Studio with real SketchUp screenshots; then Phase 4 (learning engine) or presentation Phase 3 (revisions/approvals).

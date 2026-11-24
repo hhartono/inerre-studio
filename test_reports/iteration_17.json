@@ -1,0 +1,45 @@
+{
+  "summary": "Tested INERRE Render Studio end to end: backend /api/rs/* and UI. New pytest suite test_render_studio.py: 15/15 passed with real OpenAI calls. 5 real image calls in total: 3 draft/low through the API, 1 region revise that ran at medium, and 1 UI render that ran at medium. The invalid-model call was rejected by OpenAI. Verified: 401 without a token, 403 for the client, 403 for the designer on every admin-only route; seeds (9 MAT, no MAT-007, all uncalibrated with a v1 draft; 9 ambiences); project/room/angle CRUD plus validation of reference roles and material versions; real render (queued -> completed in about 8s, 409 on a duplicate); grading (graded != raw, raw bytes unchanged, full resolution kept, png/jpeg); review/feedback leaves material versions untouched; approved.zip (404 before approval, 1 file after); master (400 when not approved, sets project.master_render_id, and the next angle's image_roles include PROJECT AMBIENCE MASTER); region revise (v2, kind local, parent_id set, v1 intact); series (one job per angle, active angle skipped); invalid custom model -> failed with a readable error; material draft -> approve -> lock -> 423 on edit/upload/corrections, designer 403, admin new version v2 copies the fields. UI: all 9 pages load; Studio views render/source/compare slider/side-by-side and version timeline work; the Warna sliders change the live canvas pixels with no /api or OpenAI call; Simpan hasil warna -> POST /grade 200; rs-job-error shows the OpenAI message; UI Render button -> progress overlay -> SELESAI in about 12s using the master; feedback save works; the region box can be drawn; the client is redirected to /projects; the designer does not see admin buttons; Presentasi/studio still works. The OpenAI key is not in the JS bundle or in any API response. Main finding: region (masked) revise outputs carry transparency, which shows as dark blotches in the UI.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/rs/renders/{rid}/revise (with region) -> run_job", "issue": "The masked-edit output from OpenAI is stored as is, as an RGBA PNG. In local render aacd52… about 26% of pixels had alpha < 250, spread over the whole image. The web/thumb webp keep the alpha, so the Studio canvas, timeline and history show dark, blotchy transparent areas on the ceiling. A raw PNG download also contains the transparency. The JPEG and graded outputs drop the alpha with convert('RGB'), so they look different from the raw view. In addition, pixels outside the selected region are not preserved: the whole image shifted in colour and texture. OpenAI masks are only guidance, not pixel-exact.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/rs/renders/{rid}/revise", "issue": "ReviseIn has no quality field, so revisions always use settings.draft_quality (medium) even when the parent render was low. The revise above cost 1132 output tokens, compared with 664 at low."},
+      {"endpoint": "PATCH /api/rs/angles/{aid}", "issue": "references[].file_id is not checked for existence. A bad id is only caught at render time ('File referensi tidak ditemukan')."},
+      {"endpoint": "DELETE /api/rs/projects/{pid} and /rooms/{rid}", "issue": "Deleting a project leaves rs file docs and storage objects orphaned. Deleting a room deletes its angles but leaves their rs_renders orphaned."},
+      {"endpoint": "GET /api/rs/projects, /projects/{pid}", "issue": "N+1 queries: 2-3 Mongo queries per project/angle."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Canvas.tsx GradedLayer", "issue": "The live-grade canvas uses 'absolute inset-0 h-full w-full' without object-contain. The container takes the source angle's aspect (1.6) while the render is 1536x1024 (1.5), so the canvas measured 1262x789 CSS px and the preview is stretched about 7% horizontally as soon as any slider is non-zero. With all sliders at 0 the <img> uses object-contain, so the image visibly jumps. Fix: add object-contain to the canvas, or size the container by the render's aspect.", "selector": "[data-testid=rs-live-canvas]", "priority": "MEDIUM"},
+      {"component": "RsMaterial version tabs", "issue": "'+ Buat versi baru' is shown to admin while the latest version is still a draft; the backend returns 400.", "selector": "[data-testid=rs-matv-new-btn]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Studio while queued", "issues": ["The 'ANTRE…' progress overlay sits on top of the 'Belum ada render' placeholder text, so the two texts overlap ('BEL ANTRE… DER')."]},
+      {"screen": "Compare slider / Berdampingan", "issues": ["When the source and render aspects differ, the two layers are not the same size; the render edge ends before the source edge in slider view."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_render_studio.py", "/app/test_reports/pytest/rs_results.xml", "/app/backend/tests/rs_alpha.py", "/app/backend/tests/rs_cleanup.py"],
+  "action_items": [
+    "In run_job, flatten the OpenAI output to RGB before store_bytes. For kind 'local', ideally composite the result onto the parent raw image using the region mask, so pixels outside the region stay exactly the same (Image.paste of the region crop, or composite with the mask).",
+    "Add object-contain to the rs-live-canvas element, or size the canvas container by the render's own aspect.",
+    "Add an optional quality field to ReviseIn (default to the parent's quality) to control cost.",
+    "Optional: hide 'Buat versi baru' while the latest version is a draft; fix the overlap of the queued overlay and placeholder; validate reference file_ids in PATCH /angles."
+  ],
+  "critical_code_review_comments": [
+    "render_studio.py is 1097 lines; split it into routers (projects/angles, renders/jobs, materials, ambiences, settings/usage).",
+    "rs_grade.py and grade.ts match except for sharpening: Python sharpens the float image against an 8-bit box blur, while TS sharpens 8-bit values. The export can differ slightly from the preview when sharpness != 0.",
+    "update_ambience uses next(...) without a default; it raises StopIteration (500) if 'current' ever points to a missing version.",
+    "Jobs run as in-process asyncio tasks; a restart marks them failed (documented). There is no retry or queue persistence."
+  ],
+  "updated_files": ["/app/backend/tests/test_render_studio.py", "/app/backend/tests/rs_alpha.py", "/app/backend/tests/rs_cleanup.py"],
+  "success_rate": {"backend": "100% of tested API contracts (15/15 pytest); 1 high-severity output-quality bug in region revise", "frontend": "about 90% (all flows work; live-canvas aspect stretch and alpha artifacts in display)"},
+  "seed_data_creation": "Created TEST_RS_Project (2 angles, 6 renders) and TEST-MAT-1. Both are deleted: the project via admin DELETE, the material via Mongo filtered by id/code. settings.custom_model is restored to ''. The main agent's TEST_Autumn project is left untouched; I added nothing to it. Seeded MAT-0xx and ambiences are unchanged. Orphaned rs file docs from the deleted project remain in the 'files' collection.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest -n0 test_render_studio.py -v (about 40s, 3-4 real OpenAI image calls, about 5 including the invalid-model attempt). Set RS_KEEP=1 to keep the project for UI checks, then run python rs_cleanup.py <pid>. rs_alpha.py <render_id...> checks render PNGs for alpha. UI login: python ticket.py admin|designer|client, then open /sign-in?__clerk_ticket=<t>. After the RGBA fix, re-run a region revise and confirm mode RGB and no dark blotches in the Studio.",
+  "rca of the issue": "Region revise artifact: rs_engine.image_edit returns the b64 PNG from /images/edits. With a mask, OpenAI returns an RGBA image whose alpha follows its soft mask handling. run_job passes these bytes straight to store_bytes; storage.process_image keeps the alpha in web/thumb webp, and the browser shows the transparent pixels over the dark ink background. Reproduce: POST /api/rs/renders/{rid}/revise with a region, wait for completion, download variant=raw&fmt=png and check Image.mode == 'RGBA'. Mitigation: Image.open(out).convert('RGB'), and for local edits paste only the region from the output onto the parent raw image."
+}

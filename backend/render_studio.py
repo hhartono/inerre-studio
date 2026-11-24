@@ -369,6 +369,7 @@ async def patch_room(rid: str, body: RoomPatch, _: dict = Depends(staff)):
 @router.delete("/rooms/{rid}")
 async def delete_room(rid: str, _: dict = Depends(staff)):
     await one("rs_rooms", rid)
+    await db().rs_renders.delete_many({"room_id": rid})
     await db().rs_angles.delete_many({"room_id": rid})
     await db().rs_rooms.delete_one({"id": rid})
     return {"ok": True}
@@ -420,6 +421,8 @@ async def patch_angle(aid: str, body: AnglePatch, _: dict = Depends(staff)):
     for r in upd.get("references", []):
         if r["role"] not in REF_ROLES:
             raise HTTPException(400, "Setiap referensi wajib punya peran yang valid")
+        if not await db().files.find_one({"id": r["file_id"], "is_deleted": False}, {"_id": 0, "id": 1}):
+            raise HTTPException(400, "File referensi tidak ditemukan")
     for mref in upd.get("materials", []):
         if not await db().rs_material_versions.find_one({"material_id": mref["material_id"], "version_no": mref["version_no"]}):
             raise HTTPException(400, "Versi material tidak ditemukan")
@@ -451,6 +454,7 @@ async def replace_source(aid: str, file: UploadFile = File(...), _: dict = Depen
 @router.delete("/angles/{aid}")
 async def delete_angle(aid: str, _: dict = Depends(staff)):
     await one("rs_angles", aid)
+    await db().rs_renders.delete_many({"angle_id": aid})
     await db().rs_angles.delete_one({"id": aid})
     return {"ok": True}
 
@@ -538,6 +542,8 @@ async def run_job(job_id: str):
             await set_(status="rendering")
             out, usage = await eng.image_edit(imgs, job["prompt"], job["model"], job["quality"], job["size"], mask)
             await set_(status="processing")
+            parent_bytes = await file_bytes(job["image_ids"][0]) if job.get("region") else None
+            out = await run_in_threadpool(eng.finalize, out, parent_bytes, job.get("region"))
             f = await store_bytes(out, job["project_id"] or "calibration", "rs_render", "image/png", f"{job_id}.png")
             cost = await log_usage(job["kind"], job["model"], usage, job["created_by"], job["project_id"], job_id)
             await set_(status="completed", raw_file_id=f["id"], width=f["width"], height=f["height"], usage=usage, cost_est=cost, completed_at=now_iso())
@@ -610,6 +616,7 @@ class ReviseIn(BaseModel):
     instruction: str
     region: Optional[dict] = None
     mode: str = "draft"
+    quality: Optional[str] = None
 
 
 @router.post("/renders/{rid}/revise")
@@ -630,7 +637,7 @@ async def revise(rid: str, body: ReviseIn, m: dict = Depends(staff)):
     angle = await one("rs_angles", parent["angle_id"])
     await guard_active({"angle_id": angle["id"]})
     await check_budget(await one("rs_projects", angle["project_id"]))
-    job = await build_job(angle, {"mode": body.mode, "protection": parent.get("protection"), "controls": parent.get("controls"), "extra": parent.get("extra", "")},
+    job = await build_job(angle, {"mode": body.mode, "quality": body.quality or parent.get("quality"), "protection": parent.get("protection"), "controls": parent.get("controls"), "extra": parent.get("extra", "")},
                           parent=parent, revision=body.instruction.strip(), region=reg)
     return await enqueue(job, m)
 

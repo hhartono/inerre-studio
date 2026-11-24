@@ -37,7 +37,7 @@ function GradedLayer({ src, adjust }: { src: string; adjust: Adjust }) {
       cancelAnimationFrame(id);
     };
   }, [base, adjust]);
-  return <canvas ref={ref} className="absolute inset-0 h-full w-full" data-testid="rs-live-canvas" />;
+  return <canvas ref={ref} className="absolute inset-0 h-full w-full object-contain" data-testid="rs-live-canvas" />;
 }
 
 function Layer({ src, adjust, testid }: { src: string; adjust?: Adjust; testid: string }) {

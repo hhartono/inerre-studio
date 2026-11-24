@@ -78,6 +78,29 @@ def to_png(data: bytes, max_side: int = 2048) -> bytes:
     return buf.getvalue()
 
 
+def finalize(out: bytes, parent: bytes = None, region: dict = None) -> bytes:
+    """Flatten to RGB; for region edits keep every pixel outside the region from the parent."""
+    from PIL import ImageDraw, ImageFilter
+    res = Image.open(io.BytesIO(out))
+    if res.mode in ("RGBA", "LA", "P"):
+        res = res.convert("RGBA")
+        bg = Image.new("RGB", res.size, (255, 255, 255))
+        bg.paste(res, mask=res.split()[-1])
+        res = bg
+    res = res.convert("RGB")
+    if parent and region:
+        base = Image.open(io.BytesIO(parent)).convert("RGB")
+        res = res.resize(base.size, Image.LANCZOS)
+        w, h = base.size
+        m = Image.new("L", base.size, 0)
+        ImageDraw.Draw(m).rectangle((region["x"] * w, region["y"] * h, (region["x"] + region["w"]) * w, (region["y"] + region["h"]) * h), fill=255)
+        m = m.filter(ImageFilter.GaussianBlur(max(2, int(min(w, h) * 0.006))))
+        res = Image.composite(res, base, m)
+    buf = io.BytesIO()
+    res.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def rect_mask(source_png: bytes, region: dict) -> bytes:
     """Transparent pixels = area the model may edit (OpenAI convention)."""
     im = Image.open(io.BytesIO(source_png))

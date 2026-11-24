@@ -108,9 +108,9 @@ function Workspace({ aid }: { aid: string }) {
             {cur && <Pill tone={approvalTone(cur.approval) as any} testid="rs-current-approval">{cur.approval === "approved" ? "Disetujui" : cur.approval === "rejected" ? "Ditolak" : "Belum dinilai"}</Pill>}
           </div>
           <div className="relative min-h-0 flex-1">
-            <Canvas aspect={angle.aspect || 1.5} source={view === "source" ? angle.source.url : baseUrl} render={cur?.raw.url || null} adjust={adjust} view={view}
+            <Canvas aspect={cur?.width && cur?.height ? cur.width / cur.height : angle.aspect || 1.5} source={view === "source" ? angle.source.url : baseUrl} render={cur?.raw.url || null} adjust={adjust} view={view}
               regionMode={regionMode} region={region} onRegion={setRegion}
-              overlay={cur && ACTIVE.includes(cur.status) ? <div className="glass eyebrow absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse px-5 py-3 text-[10px] text-brass" data-testid="rs-job-progress">{STATUS_LABEL[cur.status]}…</div> : null} />
+              overlay={cur && ACTIVE.includes(cur.status) ? <div className="eyebrow absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 animate-pulse border border-brass/30 bg-ink px-5 py-3 text-[10px] text-brass" data-testid="rs-job-progress">{STATUS_LABEL[cur.status]}…</div> : null} />
             {cur?.status === "failed" && <div className="absolute inset-x-6 bottom-6 border border-red-400/40 bg-ink/90 p-3 text-xs text-red-200" data-testid="rs-job-error">Render gagal: {cur.error}</div>}
           </div>
           <div className="no-scrollbar flex gap-2 overflow-x-auto border-t border-paper/10 p-3" data-testid="rs-version-timeline">
