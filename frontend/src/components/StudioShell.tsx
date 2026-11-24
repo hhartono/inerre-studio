@@ -23,6 +23,7 @@ export function StudioShell({ children, title }: { children: React.ReactNode; ti
           <Brand />
           <nav className="no-scrollbar flex min-w-0 flex-1 items-center gap-5 overflow-x-auto md:gap-6">
             {staff && <NavLink to="/studio" end className={navCls} data-testid="nav-studio">Studio</NavLink>}
+            {staff && <NavLink to="/render" className={navCls} data-testid="nav-render-studio">Render Studio</NavLink>}
             <NavLink to="/projects" className={navCls} data-testid="nav-client-projects">{staff ? "Klien" : "Proyek Saya"}</NavLink>
             {me?.role === "admin" && <NavLink to="/admin" className={navCls} data-testid="nav-admin">Tim & Klien</NavLink>}
           </nav>

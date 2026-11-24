@@ -11,6 +11,14 @@ import AdminUsers from "@/pages/AdminUsers";
 import ViewerPage from "@/pages/ViewerPage";
 import EditorPage from "@/pages/EditorPage";
 import SharePage from "@/pages/SharePage";
+import RsProjects from "@/pages/rs/RsProjects";
+import RsProject from "@/pages/rs/RsProject";
+import RsStudio from "@/pages/rs/RsStudio";
+import RsMaterials from "@/pages/rs/RsMaterials";
+import RsMaterial from "@/pages/rs/RsMaterial";
+import RsAmbiences from "@/pages/rs/RsAmbiences";
+import RsHistory from "@/pages/rs/RsHistory";
+import { RsDashboard, RsSettings } from "@/pages/rs/RsSettings";
 
 const STAFF = ["admin", "designer"];
 const ALL = ["admin", "designer", "client"];
@@ -31,6 +39,16 @@ export default function App() {
             <Route path="/studio/:projectId" element={<RequireRole roles={STAFF}><EditorPage /></RequireRole>} />
             <Route path="/admin" element={<RequireRole roles={["admin"]}><AdminUsers /></RequireRole>} />
             <Route path="/s/:token" element={<SharePage />} />
+            <Route path="/render" element={<RequireRole roles={STAFF}><RsDashboard /></RequireRole>} />
+            <Route path="/render/projects" element={<RequireRole roles={STAFF}><RsProjects /></RequireRole>} />
+            <Route path="/render/projects/:pid" element={<RequireRole roles={STAFF}><RsProject /></RequireRole>} />
+            <Route path="/render/studio" element={<RequireRole roles={STAFF}><RsStudio /></RequireRole>} />
+            <Route path="/render/studio/:aid" element={<RequireRole roles={STAFF}><RsStudio /></RequireRole>} />
+            <Route path="/render/materials" element={<RequireRole roles={STAFF}><RsMaterials /></RequireRole>} />
+            <Route path="/render/materials/:mid" element={<RequireRole roles={STAFF}><RsMaterial /></RequireRole>} />
+            <Route path="/render/ambiences" element={<RequireRole roles={STAFF}><RsAmbiences /></RequireRole>} />
+            <Route path="/render/history" element={<RequireRole roles={STAFF}><RsHistory /></RequireRole>} />
+            <Route path="/render/settings" element={<RequireRole roles={STAFF}><RsSettings /></RequireRole>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </MeProvider>

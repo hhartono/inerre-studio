@@ -30,9 +30,11 @@ from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 try:  # launched as `backend.server`
     from backend.clerk_auth import clerk_router, require_user
     from backend import storage
+    from backend import render_studio
 except ModuleNotFoundError:  # launched from inside backend/
     from clerk_auth import clerk_router, require_user
     import storage
+    import render_studio
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("inerre")
@@ -130,6 +132,8 @@ async def startup():
         await db[coll].create_index(field, unique=True)
     await db.scenes.create_index("project_id")
     await db.users.create_index("user_id", unique=True)
+    render_studio.CTX.update(db=db, current_member=current_member)
+    await render_studio.startup()
     try:
         await run_in_threadpool(storage.init_storage)
         logger.info("Storage initialized")
@@ -1004,6 +1008,7 @@ async def root():
 
 
 app.include_router(api)
+app.include_router(render_studio.router)
 app.include_router(clerk_router)
 app.add_middleware(
     CORSMiddleware,
