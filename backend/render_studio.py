@@ -943,7 +943,7 @@ async def approve_version(vid: str, m: dict = Depends(admin)):
     if not (v.get("photo_file_id") or v.get("approved_file_id")):
         raise HTTPException(400, "Butuh foto material asli atau tampilan render yang disetujui sebelum approve")
     if not (v.get("instructions") or v.get("finish") or v.get("base_color")):
-        raise HTTPException(400, "Isi minimal finishing, warna dasar, atau instruksi render sebelum approve")
+        raise HTTPException(400, "Isi minimal salah satu kolom: Jenis finishing, Karakter warna dasar, atau Instruksi render, sebelum menyetujui")
     await db().rs_material_versions.update_one({"id": vid}, {"$set": {"status": "approved", "approved_by": m.get("name") or m.get("email"), "approved_at": now_iso()}})
     await db().rs_materials.update_one({"id": v["material_id"]}, {"$set": {"status": "approved"}})
     return mv_out(await one("rs_material_versions", vid))

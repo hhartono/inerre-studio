@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { toast } from "sonner";
 import { X } from "lucide-react";
@@ -30,6 +30,7 @@ export default function RsMaterial() {
   const [vno, setVno] = useState<number | null>(null);
   const [corr, setCorr] = useState("");
   const [testId, setTestId] = useState<string | null>(null);
+  const saving = useRef<Promise<unknown>>(Promise.resolve());
   const load = useCallback(() => api.get(`/rs/materials/${mid}`).then((r) => setM(r.data)), [mid]);
   useEffect(() => {
     load();
@@ -51,6 +52,7 @@ export default function RsMaterial() {
   const test = tests.find((t: any) => t.id === testId) || tests[0];
   const act = async (fn: () => Promise<any>, ok?: string) => {
     try {
+      await saving.current;
       await fn();
       if (ok) toast.success(ok);
       load();
@@ -63,7 +65,12 @@ export default function RsMaterial() {
     fd.append("file", f);
     act(() => api.post(`/rs/material-versions/${v.id}/images/${slot}`, fd));
   };
-  const patch = (k: string, val: string) => val !== (v[k] || "") && act(() => api.patch(`/rs/material-versions/${v.id}`, { [k]: val }));
+  const patch = (k: string, val: string) => {
+    if (val === (v[k] || "")) return;
+    const p = saving.current.then(() => api.patch(`/rs/material-versions/${v.id}`, { [k]: val })).catch((e) => toast.error(errMsg(e)));
+    saving.current = p;
+    p.then(load);
+  };
 
   return (
     <RsShell title={m.name} aside={<div className="flex items-center gap-3"><span className="eyebrow text-[10px] text-paper/45">{m.code} · {m.category}</span><Pill tone={v.status === "draft" ? "muted" : "green"} testid="rs-matv-status">v{v.version_no} {MAT_STATUS[v.status]}</Pill></div>}>
