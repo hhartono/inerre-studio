@@ -2,7 +2,7 @@ import { api } from "@/lib/api";
 
 export interface Img { url: string | null; thumb: string | null }
 export interface MatRef { material_id: string; version_no: number; surface: string }
-export interface RefImg { file_id: string; role: string; note: string; url?: string | null; thumb?: string | null }
+export interface RefImg { file_id: string; role: string; note: string; target?: { x: number; y: number; w: number; h: number } | null; url?: string | null; thumb?: string | null }
 export interface Render {
   id: string; project_id: string; room_id: string; angle_id: string; parent_id: string | null; version_no: number;
   kind: string; status: string; error: string; mode: string; model: string; quality: string; size: string; prompt?: string;
@@ -28,7 +28,7 @@ export const STATUS_LABEL: Record<string, string> = {
 export const APPROVAL_LABEL: Record<string, string> = { pending: "Menunggu", approved: "Disetujui", rejected: "Ditolak" };
 export const MAT_STATUS: Record<string, string> = { uncalibrated: "Belum dikalibrasi", testing: "Sedang dikalibrasi", approved: "Disetujui", locked: "Terkunci", draft: "Draft" };
 export const REF_ROLES: Record<string, string> = {
-  ambience: "Referensi suasana", approved_angle: "Render angle lain (disetujui)", material: "Foto material", furniture: "Furnitur lepas", other: "Lainnya",
+  ambience: "Referensi suasana", approved_angle: "Render angle lain (disetujui)", material: "Material / wallpaper", furniture: "Furnitur lepas / lampu", other: "Lainnya",
 };
 
 export async function download(path: string, filename: string) {

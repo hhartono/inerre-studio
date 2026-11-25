@@ -398,6 +398,7 @@ class RefIn(BaseModel):
     file_id: str
     role: str
     note: str = ""
+    target: Optional[dict] = None
 
 
 class AnglePatch(BaseModel):
@@ -410,7 +411,8 @@ class AnglePatch(BaseModel):
 
 
 REF_ROLES = {"ambience": "target lighting and ambience only", "approved_angle": "approved render of another angle — match its ambience, lighting and material appearance only",
-             "material": "material appearance reference", "furniture": "loose furniture appearance reference — match look, keep shape and position from Image 1",
+             "material": "material / wallpaper appearance reference — reproduce its colour, texture, pattern and pattern scale faithfully",
+             "furniture": "loose furniture / lighting fixture reference — match its design, colour, materials and details, but keep the size, position and orientation of the object drawn in Image 1",
              "other": "supporting reference"}
 
 
@@ -423,6 +425,14 @@ async def patch_angle(aid: str, body: AnglePatch, _: dict = Depends(staff)):
             raise HTTPException(400, "Setiap referensi wajib punya peran yang valid")
         if not await db().files.find_one({"id": r["file_id"], "is_deleted": False}, {"_id": 0, "id": 1}):
             raise HTTPException(400, "File referensi tidak ditemukan")
+        if r.get("target") is not None:
+            try:
+                t = {k: max(0.0, min(1.0, float(r["target"][k]))) for k in ("x", "y", "w", "h")}
+            except (KeyError, TypeError, ValueError):
+                raise HTTPException(400, "Lokasi target tidak valid")
+            if t["w"] < 0.01 or t["h"] < 0.01:
+                raise HTTPException(400, "Kotak lokasi terlalu kecil")
+            r["target"] = t
     for mref in upd.get("materials", []):
         if not await db().rs_material_versions.find_one({"material_id": mref["material_id"], "version_no": mref["version_no"]}):
             raise HTTPException(400, "Versi material tidak ditemukan")
@@ -505,10 +515,24 @@ async def build_job(angle: dict, opts: dict, parent: Optional[dict] = None, revi
         ref = ver.get("approved_file_id") or ver.get("photo_file_id")
         if ref and len(images) < 15:
             images.append(ref); roles.append(f"material reference for {mat['code']} {mat['name']}{' on ' + mref['surface'] if mref.get('surface') else ''} — appearance only")
+    targets = []
     for r in angle.get("references", []):
-        if len(images) >= 16:
+        if len(images) >= 15:
             break
-        images.append(r["file_id"]); roles.append(REF_ROLES[r["role"]] + (f" ({r['note']})" if r.get("note") else ""))
+        images.append(r["file_id"])
+        role = REF_ROLES[r["role"]] + (f" ({r['note']})" if r.get("note") else "")
+        t = r.get("target")
+        if t:
+            targets.append({"label": f"R{len(targets) + 1}", "image": len(images), **t})
+            role += (f" — applies ONLY to the object inside box {targets[-1]['label']} of the location guide (left {t['x']:.0%}, top {t['y']:.0%}, "
+                     f"width {t['w']:.0%}, height {t['h']:.0%} of Image 1)")
+        roles.append(role)
+    if targets:
+        src = await run_in_threadpool(eng.to_png, await file_bytes(angle["source_file_id"]))
+        guide = await run_in_threadpool(eng.location_guide, src, targets)
+        g = await store_bytes(guide, angle["project_id"], "rs_guide", "image/png", "guide.png")
+        images.append(g["id"])
+        roles.append("LOCATION GUIDE ONLY — Image 1 with numbered boxes showing where each targeted reference applies. Never draw boxes, numbers or outlines in the output")
     mode = opts.get("mode") or "draft"
     model = {"draft": s["draft_model"], "final": s["final_model"], "custom": s["custom_model"]}.get(mode) or s["draft_model"]
     if mode == "custom" and not s["custom_model"]:
@@ -521,7 +545,7 @@ async def build_job(angle: dict, opts: dict, parent: Optional[dict] = None, revi
         "materials": mats, "project_instructions": "\n".join(x for x in [project.get("concept") and f"Design concept: {project['concept']}",
                                                                           project.get("palette") and f"Material palette: {project['palette']}", project.get("instructions")] if x),
         "room_instructions": room.get("instructions"), "angle_instructions": angle.get("instructions"),
-        "controls": controls, "extra": opts.get("extra", ""), "revision": revision, "region": region})
+        "controls": controls, "extra": opts.get("extra", ""), "revision": revision, "region": region, "has_targets": bool(targets)})
     return {"id": new_id(), "project_id": project["id"], "room_id": room["id"], "angle_id": angle["id"], "parent_id": parent["id"] if parent else None,
             "kind": "local" if region else "revision" if parent else "render", "status": "queued", "error": "", "mode": mode, "model": model,
             "quality": quality, "size": eng.size_for(angle.get("aspect") or 1.5), "prompt": prompt, "image_ids": images, "image_roles": roles,

@@ -101,6 +101,27 @@ def finalize(out: bytes, parent: bytes = None, region: dict = None) -> bytes:
     return buf.getvalue()
 
 
+def location_guide(source_png: bytes, targets: list) -> bytes:
+    from PIL import ImageDraw, ImageFont
+    im = Image.open(io.BytesIO(source_png)).convert("RGB")
+    w, h = im.size
+    d = ImageDraw.Draw(im)
+    lw = max(3, w // 300)
+    try:
+        font = ImageFont.truetype("DejaVuSans-Bold.ttf", max(18, w // 40))
+    except OSError:
+        font = ImageFont.load_default()
+    for t in targets:
+        x0, y0, x1, y1 = t["x"] * w, t["y"] * h, (t["x"] + t["w"]) * w, (t["y"] + t["h"]) * h
+        d.rectangle((x0, y0, x1, y1), outline=(255, 0, 140), width=lw)
+        tb = d.textbbox((x0 + lw, y0 + lw), t["label"], font=font)
+        d.rectangle((tb[0] - 4, tb[1] - 4, tb[2] + 4, tb[3] + 4), fill=(255, 0, 140))
+        d.text((x0 + lw, y0 + lw), t["label"], fill=(255, 255, 255), font=font)
+    buf = io.BytesIO()
+    im.save(buf, "PNG")
+    return buf.getvalue()
+
+
 def rect_mask(source_png: bytes, region: dict) -> bytes:
     """Transparent pixels = area the model may edit (OpenAI convention)."""
     im = Image.open(io.BytesIO(source_png))
@@ -185,6 +206,9 @@ def compile_prompt(ctx: dict) -> str:
     locks = [PROTECTION[k] for k, on in (ctx.get("protection") or {}).items() if on and k in PROTECTION]
     if locks:
         p += ["", "DESIGN PROTECTION (mandatory, fidelity to the original design over decorative creativity):"] + [f"- {x}" for x in locks]
+        if ctx.get("has_targets"):
+            p.append("- Exception: objects inside a numbered location-guide box take their design and finish from their assigned reference image, "
+                     "while keeping the size, position and orientation from Image 1. Wallpaper references keep their pattern and pattern scale.")
     amb = ctx.get("ambience")
     if amb:
         p += ["", f"AMBIENCE — {amb['name']} (v{amb['version_no']}):"]

@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { X } from "lucide-react";
+import { Crosshair, X } from "lucide-react";
+import { TargetPicker } from "@/components/rs/TargetPicker";
 import { toast } from "sonner";
 import { api, errMsg, img } from "@/lib/api";
 import { MAT_STATUS, REF_ROLES } from "@/lib/rs";
@@ -13,6 +14,7 @@ export function SourcePanel({ angle, materials, onSaved }: { angle: any; materia
   const [busy, setBusy] = useState("");
   const [instr, setInstr] = useState(angle.instructions || "");
   const [pick, setPick] = useState("");
+  const [target, setTarget] = useState<number | null>(null);
   const patch = async (body: any) => {
     try {
       onSaved((await api.patch(`/rs/angles/${angle.id}`, body)).data);
@@ -20,7 +22,7 @@ export function SourcePanel({ angle, materials, onSaved }: { angle: any; materia
       toast.error(errMsg(e));
     }
   };
-  const refs = angle.references.map(({ file_id, role, note }: any) => ({ file_id, role, note }));
+  const refs = angle.references.map(({ file_id, role, note, target }: any) => ({ file_id, role, note, target: target || null }));
   const addRefs = async (files: File[]) => {
     setBusy("ref");
     const added = [];
@@ -70,6 +72,7 @@ export function SourcePanel({ angle, materials, onSaved }: { angle: any; materia
               <select className={`${inputCls} py-1.5 text-xs`} value={r.role} onChange={(e) => patch({ references: refs.map((x: any, j: number) => (j === i ? { ...x, role: e.target.value } : x)) })} data-testid={`rs-ref-role-${i}`}>
                 {Object.entries(REF_ROLES).map(([k, l]) => <option key={k} value={k}>{l}</option>)}
               </select>
+              <button onClick={() => setTarget(i)} className={`shrink-0 p-1 ${r.target ? "text-brass" : "text-paper/40 hover:text-paper"}`} title={r.target ? "Lokasi ditandai — ubah" : "Tandai lokasi di SketchUp"} data-testid={`rs-ref-target-${i}`}><Crosshair size={14} /></button>
               <button onClick={() => patch({ references: refs.filter((_: any, j: number) => j !== i) })} className="p-1 text-paper/40 hover:text-red-300" data-testid={`rs-ref-remove-${i}`}><X size={14} /></button>
             </div>
           ))}
@@ -80,6 +83,12 @@ export function SourcePanel({ angle, materials, onSaved }: { angle: any; materia
           </select>
           <UploadButton label="Tambah" multiple busy={busy === "ref" ? "…" : ""} onFiles={addRefs} testid="rs-ref-upload" />
         </div>
+        <p className="mt-2 text-[11px] leading-relaxed text-paper/35">Klik ikon bidik untuk menandai objek tujuan di SketchUp (lampu gantung, furnitur lepas, dinding wallpaper).</p>
+        {target !== null && angle.references[target] && (
+          <TargetPicker open onClose={() => setTarget(null)} source={angle.source.url} aspect={angle.aspect || 1.5} refThumb={angle.references[target].thumb}
+            initial={angle.references[target].target || null}
+            onSave={async (b) => { const i = target; setTarget(null); await patch({ references: refs.map((x: any, j: number) => (j === i ? { ...x, target: b } : x)) }); }} />
+        )}
       </div>
       <div className={sec}>
         <Label>Material terpasang</Label>
