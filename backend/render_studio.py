@@ -4,7 +4,7 @@ import logging
 import uuid
 import zipfile
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import requests
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Response, UploadFile
@@ -398,7 +398,7 @@ class RefIn(BaseModel):
     file_id: str
     role: str
     note: str = ""
-    target: Optional[dict] = None
+    target: Optional[Any] = None
 
 
 class AnglePatch(BaseModel):
@@ -428,8 +428,9 @@ async def patch_angle(aid: str, body: AnglePatch, _: dict = Depends(staff)):
         if r.get("target") is not None:
             try:
                 t = {k: max(0.0, min(1.0, float(r["target"][k]))) for k in ("x", "y", "w", "h")}
-            except (KeyError, TypeError, ValueError):
+            except (KeyError, TypeError, ValueError, IndexError):
                 raise HTTPException(400, "Lokasi target tidak valid")
+            t["w"], t["h"] = min(t["w"], 1 - t["x"]), min(t["h"], 1 - t["y"])
             if t["w"] < 0.01 or t["h"] < 0.01:
                 raise HTTPException(400, "Kotak lokasi terlalu kecil")
             r["target"] = t
@@ -481,7 +482,7 @@ async def ambience_for(project: dict, room: dict) -> Optional[dict]:
     return {"id": a["id"], "name": a["name"], **v}
 
 
-async def build_job(angle: dict, opts: dict, parent: Optional[dict] = None, revision: str = "", region: dict = None) -> dict:
+async def build_job(angle: dict, opts: dict, parent: Optional[dict] = None, revision: str = "", region: dict = None, preview: bool = False) -> dict:
     project = await one("rs_projects", angle["project_id"])
     room = await one("rs_rooms", angle["room_id"])
     s = await get_settings()
@@ -528,10 +529,12 @@ async def build_job(angle: dict, opts: dict, parent: Optional[dict] = None, revi
                      f"width {t['w']:.0%}, height {t['h']:.0%} of Image 1)")
         roles.append(role)
     if targets:
-        src = await run_in_threadpool(eng.to_png, await file_bytes(angle["source_file_id"]))
-        guide = await run_in_threadpool(eng.location_guide, src, targets)
-        g = await store_bytes(guide, angle["project_id"], "rs_guide", "image/png", "guide.png")
-        images.append(g["id"])
+        if preview:
+            images.append("(guide)")
+        else:
+            src = await run_in_threadpool(eng.to_png, await file_bytes(angle["source_file_id"]))
+            guide = await run_in_threadpool(eng.location_guide, src, targets)
+            images.append((await store_bytes(guide, angle["project_id"], "rs_guide", "image/png", "guide.png"))["id"])
         roles.append("LOCATION GUIDE ONLY — Image 1 with numbered boxes showing where each targeted reference applies. Never draw boxes, numbers or outlines in the output")
     mode = opts.get("mode") or "draft"
     model = {"draft": s["draft_model"], "final": s["final_model"], "custom": s["custom_model"]}.get(mode) or s["draft_model"]
@@ -614,7 +617,7 @@ async def render_angle(aid: str, body: RenderIn, m: dict = Depends(staff)):
 
 @router.get("/angles/{aid}/prompt-preview")
 async def prompt_preview(aid: str, _: dict = Depends(admin)):
-    job = await build_job(await one("rs_angles", aid), {})
+    job = await build_job(await one("rs_angles", aid), {}, preview=True)
     return {"prompt": job["prompt"], "image_roles": job["image_roles"], "model": job["model"], "size": job["size"], "materials": job["materials"]}
 
 

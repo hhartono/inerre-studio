@@ -53,6 +53,7 @@ User request: full "INERRE Render Studio — Architectural Visual Intelligence E
 - Seeds: MAT-001…MAT-010 (no 007) uncalibrated, 9 ambience presets.
 - Tests: /app/backend/tests/test_render_studio.py, iteration_17 report (15/15 backend).
 - Fix (2026-11-25): "Setujui material" no longer races the onBlur field save (actions await pending saves; failed save stops the action); clearer validation message.
+- Reference targets (2026-11-25): crosshair per reference opens TargetPicker to mark the object box on the SketchUp source; backend adds a numbered "location guide" image + per-reference box text; furniture/lamp refs copy design but keep size/position; material/wallpaper refs copy pattern + scale. iteration_19 13/13.
 
 ## Backlog
 - Render Studio Phase 4: Train & Calibrate learning rules (vision model converts feedback → structured rules, scopes, approval, conflict resolution), intelligent revision classification, persistent project memory rules.

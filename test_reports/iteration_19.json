@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the reference target ('Tandai lokasi') feature in Render Studio, both backend and frontend, using a TEST_RS_Targets project (1 room, 1 angle with a generated SketchUp-like PNG, and 2 reference files). Backend: new file test_rs_targets.py, 13/13 passed. Invalid targets return 400 'Lokasi target tidak valid': non-numeric x, a missing key, or w=None. Too-small boxes return 400 'Kotak lokasi terlalu kecil': w=0.005, or a negative h that clamps to 0. A target that is not a dict returns 422 from Pydantic, not 400. Out-of-range values are clamped to 0..1, and numeric strings are converted to numbers. Targets persist through GET. In prompt-preview, the furniture role contains 'keep the size, position and orientation' and 'applies ONLY to the object inside box R1 ... (left 38%, top 48%, width 24%, height 30%)'. The material role contains 'pattern and pattern scale' and has no box text. The last role is 'LOCATION GUIDE ONLY'. The prompt contains the 'Exception: ... numbered location-guide box' protection line. When no reference is targeted, there is no guide image and no exception line. Real render: 1 OpenAI call (draft, low) with the extra guide image completed in about 10s, and no boxes or labels appeared in the output. Frontend (admin, via Clerk ticket): the role dropdown shows 'Material / wallpaper' and 'Furnitur lepas / lampu'. A targeted reference shows a brass crosshair with the title 'Lokasi ditandai — ubah'. Reopening the dialog shows the saved box (38/48/24/30%). 'Hapus tanda' clears the target, and the icon turns grey again. 'Simpan lokasi' is disabled until a box is drawn. Dragging draws rs-target-box (20/15/60/50%). Saving turns the icon brass. After a reload, the brass icon and the box are still there, and the API returned target {x:0.2, y:0.15, w:0.6, h:0.5}. 'Batal' closes the dialog. The TEST_ project was deleted afterwards (404 confirmed).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/rs/angles/{aid}", "issue": "A target that is not a dict (for example the string 'abc') returns a 422 Pydantic error instead of 400 'Lokasi target tidak valid'. Also, x+w and y+h are not clamped to 1, so a box like x=0.9, w=0.5 is accepted and extends past the image."},
+      {"endpoint": "GET /api/rs/angles/{aid}/prompt-preview", "issue": "build_job stores a new rs_guide PNG file every time the preview is called, even though no render is made. This leaves orphan files and storage objects (delete_project also never removes files)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Studio left panel / TargetPicker", "issues": ["The reference role select is too narrow, so 'Furnitur lepas / lampu' is cut off to 'Furnitur lepas'.", "The drawn box (border-brass, bg-brass/20) has low contrast on light cream SketchUp walls. Consider a stronger outline or a darker halo.", "The 'Batal' button in TargetPicker has no data-testid."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_rs_targets.py", "/app/test_reports/pytest/rs_targets.xml"],
+  "action_items": [
+    "Optional: validate that target is a dict and return 400 when it is not, and clamp w to 1-x and h to 1-y.",
+    "Optional: do not store the guide image on prompt-preview. Build it only when a render job is created, or use a flag.",
+    "Optional: compile_prompt always says 'Never copy ... furniture ... from any reference image'. This conflicts with furniture references that have no target, and with targeted references when all protection toggles are off, because the exception line is only added when locks exist. Consider adding the exception, or rewording that line, whenever has_targets is true or furniture references exist.",
+    "Optional: make the role select wider, or shorten the label, and add data-testid='rs-target-cancel'."
+  ],
+  "critical_code_review_comments": [
+    "rs_engine.compile_prompt: the has_targets exception is added only inside the `if locks:` block. If every protection toggle is off, the targeted-reference exception is missing, while the generic 'Never copy furniture from any reference' sentence stays.",
+    "build_job: the reference loop stops at 15 images, and then the guide is appended, so up to 16 images can be sent. This is the gpt-image-1 limit, so it is OK, but there is no headroom left.",
+    "The targets[].image key is computed but never used."
+  ],
+  "updated_files": ["/app/backend/tests/test_rs_targets.py"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (all requested UI checks)"},
+  "seed_data_creation": "Created TEST_RS_Targets project d8c405fb07c34203b48f0e11133e1e17 (angle eac4666e17f04f38814b336a8dbfe301, 2 reference files, 1 draft render). The project was deleted by admin DELETE (now returns 404). The file docs and storage objects for the reference, guide and render images remain because there is no file delete API. No other data was touched. Settings are unchanged (custom_model '', draft_quality medium).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && RS_KEEP=1 RS_REAL=1 pytest -n0 test_rs_targets.py -v -s. RS_REAL adds 1 OpenAI call, and RS_KEEP keeps the project for UI testing. For UI sign-in, run python ticket.py admin, then open /sign-in?__clerk_ticket=<t> and go to /render/studio/<aid>. Clean up with python rs_cleanup.py <pid>."
+}

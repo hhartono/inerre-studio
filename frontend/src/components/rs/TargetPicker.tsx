@@ -31,11 +31,11 @@ export function TargetPicker({ open, onClose, source, aspect, refThumb, initial,
           onPointerMove={(e) => { if (!start.current) return; const p = rel(e), s = start.current; setB({ x: Math.min(s.x, p.x), y: Math.min(s.y, p.y), w: Math.abs(p.x - s.x), h: Math.abs(p.y - s.y) }); }}
           onPointerUp={() => (start.current = null)} data-testid="rs-target-canvas">
           {source && <img src={img(source)} alt="" draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-contain" />}
-          {b && <div className="pointer-events-none absolute border-2 border-brass bg-brass/20" style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }} data-testid="rs-target-box" />}
+          {b && <div className="pointer-events-none absolute border-2 border-[#ff008c] bg-[#ff008c]/15 shadow-[0_0_0_1px_rgba(0,0,0,0.6)]" style={{ left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` }} data-testid="rs-target-box" />}
         </div>
         <div className="flex justify-end gap-3">
           {initial && <button className={btnGhost} onClick={() => onSave(null)} data-testid="rs-target-clear">Hapus tanda</button>}
-          <button className={btnGhost} onClick={onClose}>Batal</button>
+          <button className={btnGhost} onClick={onClose} data-testid="rs-target-cancel">Batal</button>
           <button className={btn} disabled={!b || b.w < 0.01 || b.h < 0.01} onClick={() => b && onSave(b)} data-testid="rs-target-save">Simpan lokasi</button>
         </div>
       </DialogContent>

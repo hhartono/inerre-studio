@@ -28,7 +28,7 @@ export const STATUS_LABEL: Record<string, string> = {
 export const APPROVAL_LABEL: Record<string, string> = { pending: "Menunggu", approved: "Disetujui", rejected: "Ditolak" };
 export const MAT_STATUS: Record<string, string> = { uncalibrated: "Belum dikalibrasi", testing: "Sedang dikalibrasi", approved: "Disetujui", locked: "Terkunci", draft: "Draft" };
 export const REF_ROLES: Record<string, string> = {
-  ambience: "Referensi suasana", approved_angle: "Render angle lain (disetujui)", material: "Material / wallpaper", furniture: "Furnitur lepas / lampu", other: "Lainnya",
+  ambience: "Referensi suasana", approved_angle: "Render angle lain (disetujui)", material: "Material / wallpaper", furniture: "Furnitur / lampu", other: "Lainnya",
 };
 
 export async function download(path: string, filename: string) {

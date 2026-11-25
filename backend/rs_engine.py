@@ -201,14 +201,14 @@ def compile_prompt(ctx: dict) -> str:
     p = [ctx.get("base_instruction") or DEFAULT_INSTRUCTION, "", "IMAGE ROLES:"]
     for i, role in enumerate(ctx["image_roles"], start=1):
         p.append(f"- Image {i}: {role}")
-    p.append("Never copy architectural elements, furniture or layout from any reference image into the design. "
-             "Image 1 is the only source of geometry, camera, composition and furniture placement.")
+    p.append("Never copy architecture, walls, layout or room shape from any reference image into the design. "
+             "Image 1 is the only source of geometry, camera, composition and furniture placement; furniture, lighting and material references only define the appearance of the objects they are assigned to.")
     locks = [PROTECTION[k] for k, on in (ctx.get("protection") or {}).items() if on and k in PROTECTION]
     if locks:
         p += ["", "DESIGN PROTECTION (mandatory, fidelity to the original design over decorative creativity):"] + [f"- {x}" for x in locks]
-        if ctx.get("has_targets"):
-            p.append("- Exception: objects inside a numbered location-guide box take their design and finish from their assigned reference image, "
-                     "while keeping the size, position and orientation from Image 1. Wallpaper references keep their pattern and pattern scale.")
+    if ctx.get("has_targets"):
+        p.append("- Exception: objects inside a numbered location-guide box take their design and finish from their assigned reference image, "
+                 "while keeping the size, position and orientation from Image 1. Wallpaper references keep their pattern and pattern scale.")
     amb = ctx.get("ambience")
     if amb:
         p += ["", f"AMBIENCE — {amb['name']} (v{amb['version_no']}):"]
