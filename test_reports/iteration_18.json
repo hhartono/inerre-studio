@@ -1,0 +1,25 @@
+{
+  "summary": "Frontend-only retest of the 'Setujui material' save race fix (RsMaterial.tsx saving-promise chain) in preview, using TEST materials as the admin (Clerk ticket sign-in). All 4 requested checks passed. (1) Created TEST-MAT-9 'TEST_Oak' (Natural veneer) through the Material Library form and uploaded a photo to the middle panel. Then clicked into rs-matv-finish, typed 'matte natural oak' and clicked rs-cal-approve-btn straight away. Network order: PATCH material-version 200, then POST approve 200. The approve request waited for the save. Toast 'Material disetujui'; status pill 'v1 Disetujui'; no validation error. After a reload, the finish value 'matte natural oak' was still saved. (2) Lock: rs-cal-lock-btn showed after approval. Clicking it gave the toast 'Versi dikunci' and the pill 'v1 Terkunci'. All spec textareas were disabled, rs-matv-locked-note showed, and the approve and lock buttons were hidden. (3) Negative: TEST-MAT-10 with a photo and empty spec fields. Approve returned 400 with the new toast 'Isi minimal salah satu kolom: Jenis finishing, Karakter warna dasar, atau Instruksi render, sebelum menyetujui', and the status stayed 'v1 Draft'. (4) 'Buat tes kalibrasi' was not clicked, so no OpenAI calls were made. Customer case: the production material record was not reachable, so it was reproduced only with TEST materials in preview.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/rs_mat_cleanup.py"],
+  "action_items": [
+    "Optional: in patch(), the .catch() swallows a failed PATCH, so a later approve still runs and shows the validation error after the save-error toast. Consider rethrowing or marking the failure so act() can stop with a single clear message.",
+    "Optional: the Brand and Kode pabrikan meta fields save through act() and do not join the saving chain. This is harmless for approve validation, but it is inconsistent."
+  ],
+  "critical_code_review_comments": [
+    "The fix works because the textarea's blur fires on mousedown, before the button's click. patch() sets saving.current synchronously, and act() awaits it. This also covers keyboard Tab+Enter. It would not cover a submit without a blur, such as a keyboard shortcut, but there is none.",
+    "patch() compares the value with v[k] from the render closure. If you type, blur, and blur again before load() finishes, the PATCH is sent twice. This is harmless."
+  ],
+  "updated_files": ["/app/backend/tests/rs_mat_cleanup.py"],
+  "success_rate": {"backend": "not tested (frontend only)", "frontend": "100% (4/4 scenarios)"},
+  "seed_data_creation": "I created TEST-MAT-9 (id 41e57dc5621542e8b3ac043179ec88a3) and TEST-MAT-10 (id beccb3d80448487ba98a2e6a7877ca94). I then deleted them, by id, from rs_materials and rs_material_versions, along with their 2 photo docs in 'files'. No calibration tests were created. Objects in object storage remain because storage.py has no delete API. The 9 seeded MAT-0xx materials are unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Sign in: cd /app/backend/tests && python ticket.py admin, then open /sign-in?__clerk_ticket=<t>. Upload works with set_input_files on '[data-testid=rs-cal-photo-upload] input[type=file]'. Cleanup: python rs_mat_cleanup.py <material_id...> (it only deletes codes that start with TEST-).",
+  "rca of the issue": "Original bug: spec textareas save on blur through a PATCH that nobody awaited, and approve fired in parallel. The backend could handle approve before the PATCH and see empty fields, which returned 400. Fix confirmed: the PATCH is queued in the saving ref, and act() awaits it, so the order seen was PATCH -> approve."
+}

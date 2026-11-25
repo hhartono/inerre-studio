@@ -52,6 +52,7 @@ User request: full "INERRE Render Studio — Architectural Visual Intelligence E
 - Frontend /render/*: Dashboard, Proyek, Render Studio (3-panel: sources/refs with roles/materials/instructions | canvas with render/SketchUp/slider/side-by-side, zoom/pan, fullscreen, region select, version timeline | Render / Warna (live, no AI) / Review & Revisi tabs), Material Library + calibration studio (draft→approve→lock, new versions, corrections, JSON import), Ambience Library (9 presets, versions, rollback), Riwayat (compare 2), Pengaturan (models, budgets, usage).
 - Seeds: MAT-001…MAT-010 (no 007) uncalibrated, 9 ambience presets.
 - Tests: /app/backend/tests/test_render_studio.py, iteration_17 report (15/15 backend).
+- Fix (2026-11-25): "Setujui material" no longer races the onBlur field save (actions await pending saves; failed save stops the action); clearer validation message.
 
 ## Backlog
 - Render Studio Phase 4: Train & Calibrate learning rules (vision model converts feedback → structured rules, scopes, approval, conflict resolution), intelligent revision classification, persistent project memory rules.

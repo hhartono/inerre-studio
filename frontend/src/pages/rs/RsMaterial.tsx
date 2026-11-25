@@ -52,7 +52,7 @@ export default function RsMaterial() {
   const test = tests.find((t: any) => t.id === testId) || tests[0];
   const act = async (fn: () => Promise<any>, ok?: string) => {
     try {
-      await saving.current;
+      if ((await saving.current) === false) return;
       await fn();
       if (ok) toast.success(ok);
       load();
@@ -67,7 +67,7 @@ export default function RsMaterial() {
   };
   const patch = (k: string, val: string) => {
     if (val === (v[k] || "")) return;
-    const p = saving.current.then(() => api.patch(`/rs/material-versions/${v.id}`, { [k]: val })).catch((e) => toast.error(errMsg(e)));
+    const p = saving.current.then(() => api.patch(`/rs/material-versions/${v.id}`, { [k]: val })).then(() => true, (e) => (toast.error(errMsg(e)), false));
     saving.current = p;
     p.then(load);
   };
